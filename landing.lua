@@ -16,7 +16,6 @@ landing.handler = {}
             if (landing.autoDestroyPlanes[name]) then
                 _unit = Unit.getByName(name)
                 _unit:destroy()
-                trigger.action.outText(name .. ' got auto detroyed', 60)
             else
                 trigger.action.setUserFlag(name .. '_landed', true)
             end

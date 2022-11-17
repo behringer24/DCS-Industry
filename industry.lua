@@ -44,8 +44,6 @@ function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
     local _group = Group.getByName(groupName)
     local _addRessources = 0
 
-    trigger.action.outText(string.format("Coalition:%d Name:%s", _group:getCoalition(), _group:getName()), 15)
-
     -- not using Group.getUnits() due to DCS bug with some unit types
     for i=1,_group:getSize() do
         local _unit = _group:getUnit(i)
