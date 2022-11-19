@@ -3,13 +3,72 @@
 if (industry ~= nil) then return 0 end
 industry = {}
 
+industry.version = "v0.3.0"
 industry.ressources = {red = 200, blue = 200}
 industry.factories = {red= 1, blue = 1}
 industry.storages = {red= 1, blue = 1}
+industry.respawnGroup = {}
+
+industry.Queue = function()
+    local queue = {}
+    local head = 0
+    local last = -1
+
+    function queue.push(element)
+        last = last + 1
+        queue[last] = element
+    end
+
+    function queue.get()
+        if (head > last) then return nil end
+        return queue[head]
+    end
+    
+    function queue.pop()
+        if (head > last) then return nil end
+        local _result = queue[head]
+        queue[head] = nil
+        head = head + 1        
+        return _result
+    end
+
+    return queue
+end
+
+industry.respawnQueueRed = industry.Queue()
+industry.respawnQueueBlue = industry.Queue()
+industry.respawnQueueRedFree = industry.Queue()
+industry.respawnQueueBlueFree = industry.Queue()
+
+function industry.getGroupNameByUnitName(unitname)
+    return mist.DBs.unitsByName[unitname].groupName
+end
+
+function industry.getCoalitionByGroupname(groupname)
+    return mist.DBs.groupsByName[groupname].coalition
+end
 
 function industry.destroy(gpName)
     local _group = Group.getByName(gpName)
     Group.destroy(_group)
+end
+
+function industry.queueRespawn(gpName, costs)
+    local groupdata = mist.getGroupData(gpName)
+
+    if (costs == 0) then
+        if (groupdata.coalition == "red") then
+            industry.respawnQueueRedFree.push(gpName)
+        else
+            industry.respawnQueueBlueFree.push(gpName)
+        end
+    else
+        if (groupdata.coalition == "red") then
+            industry.respawnQueueRed.push({name = gpName, cost = costs})
+        else
+            industry.respawnQueueBlue.push({name = gpName, cost = costs})
+        end
+    end
 end
 
 function industry.respawn(gpName, costs)
@@ -19,15 +78,26 @@ function industry.respawn(gpName, costs)
         if industry.ressources.red >= costs then
             industry.ressources.red = industry.ressources.red - costs
             mist.respawnGroup(gpName, true)
-            trigger.action.outText(string.format("Respawned group %s for %d tons of RED ressources", gpName, costs), 10)
+            if (costs > 0) then
+                trigger.action.outText(string.format("Respawned RED group %s for %d tons of ressources", gpName, costs), 10)
+            else
+                trigger.action.outText(string.format("Respawned RED group %s", gpName), 10)
+            end
+            return true
         end
     else
         if industry.ressources.blue >= costs then
             industry.ressources.blue = industry.ressources.blue - costs
             mist.respawnGroup(gpName, true)
-            trigger.action.outText(string.format("Respawned group %s for %d tons of BLUE ressources", gpName, costs), 10)
+            if (costs > 0) then
+                trigger.action.outText(string.format("Respawned BLUE group %s for %d tons of ressources", gpName, costs), 10)
+            else
+                trigger.action.outText(string.format("Respawned BLUE group %s", gpName), 10)
+            end
+            return true
         end
     end
+    return false
 end
 
 function industry.addRessources(coalition, tons)
@@ -44,21 +114,22 @@ function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
     local _group = Group.getByName(groupName)
     local _addRessources = 0
 
-    -- not using Group.getUnits() due to DCS bug with some unit types
-    for i=1,_group:getSize() do
-        local _unit = _group:getUnit(i)
-        env.info(string.format("Convoy unit %d arrived: %s (%s)", i, _unit:getName(), _unit:getTypeName()), false)
-        if (string.match(_unit:getTypeName(), truckTypeName) and _unit:getLife() > 1) then
-            _addRessources = _addRessources + tonsEach
+    if (_group) then
+        -- not using Group.getUnits() due to DCS bug with some unit types        
+        for i=1,_group:getSize() do
+            local _unit = _group:getUnit(i)
+            if (string.match(_unit:getTypeName(), truckTypeName) and _unit:getLife() > 1) then
+                _addRessources = _addRessources + tonsEach
+            end
         end
-    end
 
-    if (_group:getCoalition() == 1) then
-        industry.ressources.red = industry.ressources.red + _addRessources
-        trigger.action.outText(string.format("A RED convoy with %d tons of ressources arrived at its destination", _addRessources), 5)
-    else
-        industry.ressources.blue = industry.ressources.blue + _addRessources
-        trigger.action.outText(string.format("A BLUE convoy with %d tons of ressources arrived at its destination", _addRessources), 5)
+        if (_group:getCoalition() == 1) then
+            industry.ressources.red = industry.ressources.red + _addRessources
+            trigger.action.outText(string.format("A RED convoy with %d tons of ressources arrived at its destination", _addRessources), 5)
+        else
+            industry.ressources.blue = industry.ressources.blue + _addRessources
+            trigger.action.outText(string.format("A BLUE convoy with %d tons of ressources arrived at its destination", _addRessources), 5)
+        end
     end
 end
 
@@ -78,7 +149,11 @@ function industry.destroyStorage(coalition)
     end
 end
 
-function industry.loop()
+function industry.addRespawnGroup(name, cost)
+    industry.respawnGroup[name] = cost
+end
+
+function industry.productionLoop()
     trigger.action.outText("Industry ressources arrived", 5)
     industry.ressources.red = industry.ressources.red + 1
     industry.ressources.blue = industry.ressources.blue + 1
@@ -136,6 +211,62 @@ function industry.loop()
     trigger.action.outText(string.format("BLUE (%d/%d): %d tons    RED (%d/%d): %d tons", industry.factories.blue, industry.storages.blue, industry.ressources.blue, industry.factories.red, industry.storages.red, industry.ressources.red), 10)
 end
 
-mist.scheduleFunction(industry.loop,{} , timer.getTime() + 1, 300)
+function industry.respawnLoop()
+    local _blueGroup = industry.respawnQueueBlue.get()
+    if (_blueGroup and mist.groupIsDead(_blueGroup.name) and industry.respawn(_blueGroup.name, _blueGroup.cost)) then
+        industry.respawnQueueBlue.pop()
+        trigger.action.setUserFlag(_blueGroup.name .. '_respawn', true)
+    end
 
-env.info("Industry script initialized")
+    local _blueGroupFree = industry.respawnQueueBlueFree.pop()
+    if (_blueGroupFree) then
+        industry.respawn(_blueGroupFree, 0)
+        trigger.action.setUserFlag(_blueGroupFree .. '_respawn', true)
+    end
+    
+    local _redGroup = industry.respawnQueueRed.get()
+    if (_redGroup and mist.groupIsDead(_redGroup.name) and industry.respawn(_redGroup.name, _redGroup.cost)) then
+        industry.respawnQueueRed.pop()
+        trigger.action.setUserFlag(_redGroup.name .. '_respawn', true)
+    end
+
+    local _redGroupFree = industry.respawnQueueRedFree.pop()
+    if (_redGroupFree) then
+        industry.respawn(_redGroupFree, 0)
+        trigger.action.setUserFlag(_redGroupFree .. '_respawn', true)
+    end
+end
+
+industry.eventHandler = {}
+function industry.eventHandler:onEvent(event)
+    if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or event.id == world.event.S_EVENT_UNIT_LOST) then
+        local _name = event.initiator:getName()        
+        local _groupname = industry.getGroupNameByUnitName(_name)
+        local _category = mist.getGroupData(_groupname).category        
+
+        if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
+            if (industry.respawnGroup[_groupname]) then  
+                local _unit = Unit.getByName(_name)          
+                _unit:destroy()
+            end
+            trigger.action.setUserFlag(_name .. '_landed', true) 
+        end
+        
+        local _group = Group.getByName(_groupname)
+        if ((_group == nil or #_group:getUnits() < 2) and industry.respawnGroup[_groupname]) then
+            if (industry.getCoalitionByGroupname(_groupname) == 'red') then
+                industry.respawnQueueRed.push({name = _groupname, cost = industry.respawnGroup[_groupname]})
+            else if (industry.getCoalitionByGroupname(_groupname) == 'blue') then
+                industry.respawnQueueBlue.push({name = _groupname, cost = industry.respawnGroup[_groupname]})
+                end
+            end        
+        end
+    end
+end
+
+world.addEventHandler(industry.eventHandler)
+
+mist.scheduleFunction(industry.productionLoop,{} , timer.getTime() + 1, 300)
+mist.scheduleFunction(industry.respawnLoop,{} , timer.getTime() + 30, 30)
+
+env.info('Industry ' .. industry.version .. ' initialized')
