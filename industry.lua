@@ -41,10 +41,12 @@ industry.respawnQueueRedFree = industry.Queue()
 industry.respawnQueueBlueFree = industry.Queue()
 
 function industry.getGroupNameByUnitName(unitname)
+    if (mist.DBs.unitsByName[unitname] == nil) then return nil end
     return mist.DBs.unitsByName[unitname].groupName
 end
 
 function industry.getCoalitionByGroupname(groupname)
+    if (mist.DBs.groupsByName[groupname] == nil) then return nil end
     return mist.DBs.groupsByName[groupname].coalition
 end
 
@@ -134,18 +136,18 @@ function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
 end
 
 function industry.destroyStorage(coalition)
-    if (string.match(coalition, "RED") and industry.storages.red > 0) then
+    if (string.match(coalition, "red") and industry.storages.red > 0) then
         industry.ressources.red = industry.ressources.red - math.floor(industry.ressources.red / industry.storages.red)
         industry.storages.red = industry.storages.red - 1
 
-        trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 5)   
+        trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 10)   
     end
 
-    if (string.match(coalition, "BLUE") and industry.storages.blue > 0) then
+    if (string.match(coalition, "blue") and industry.storages.blue > 0) then
         industry.ressources.blue = industry.ressources.blue - math.floor(industry.ressources.blue / industry.storages.blue)
         industry.storages.blue = industry.storages.blue - 1
 
-        trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 5)   
+        trigger.action.outText(string.format("A BLUE storage has been destroyed. %d tons ressources left", industry.ressources.blue), 10)   
     end
 end
 
@@ -251,7 +253,17 @@ function industry.eventHandler:onEvent(event)
             end
             trigger.action.setUserFlag(_name .. '_landed', true) 
         end
-        
+
+        if (_category == 'static') then
+            if (string.match(_name,'Factory.*')) then
+                trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+            end
+
+            if (string.match(_name,'Storage.*')) then
+                industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
+            end
+        end
+
         local _group = Group.getByName(_groupname)
         if ((_group == nil or #_group:getUnits() < 2) and industry.respawnGroup[_groupname]) then
             if (industry.getCoalitionByGroupname(_groupname) == 'red') then
