@@ -3,32 +3,46 @@
 if (industry ~= nil) then return 0 end
 industry = {}
 
-industry.version = "v0.3.0"
+industry.version = "v0.4.0"
 industry.ressources = {red = 200, blue = 200}
 industry.factories = {red= 1, blue = 1}
 industry.storages = {red= 1, blue = 1}
 industry.respawnGroup = {}
+industry.respawnTriesBlue = 0
+industry.respawnTriesRed = 0
 
+---------------------------------------------------------
+-- Queue implementation
+-- element needs to have a name field to block from
+-- adding elements to queue multiple times
+---------------------------------------------------------
 industry.Queue = function()
     local queue = {}
+    local lock = {}
     local head = 0
     local last = -1
 
     function queue.push(element)
+        if (lock[element.name]) then return end
         last = last + 1
         queue[last] = element
+        lock[element.name] = true
+        env.info("Pushed "..element.name.." to queue")
     end
 
     function queue.get()
         if (head > last) then return nil end
+        env.info("Read "..queue[head].name.." from queue")
         return queue[head]
     end
     
     function queue.pop()
         if (head > last) then return nil end
         local _result = queue[head]
+        lock[_result.name] = nil
         queue[head] = nil
-        head = head + 1        
+        head = head + 1
+        env.info("Poped ".._result.name.." from queue")
         return _result
     end
 
@@ -40,29 +54,50 @@ industry.respawnQueueBlue = industry.Queue()
 industry.respawnQueueRedFree = industry.Queue()
 industry.respawnQueueBlueFree = industry.Queue()
 
+---------------------------------------------------------
+-- Get group name of unit
+-- Uses MIST so it also works on dead groups
+---------------------------------------------------------
 function industry.getGroupNameByUnitName(unitname)
-    if (mist.DBs.unitsByName[unitname] == nil) then return nil end
-    return mist.DBs.unitsByName[unitname].groupName
+    if (mist.DBs.unitsByName[unitname]) then
+        return mist.DBs.unitsByName[unitname].groupName
+    else
+        return nil
+    end
 end
 
+---------------------------------------------------------
+-- Get coalition of group by groupname
+-- Uses MIST so it also works on dead groups
+---------------------------------------------------------
 function industry.getCoalitionByGroupname(groupname)
-    if (mist.DBs.groupsByName[groupname] == nil) then return nil end
-    return mist.DBs.groupsByName[groupname].coalition
+    if (mist.DBs.groupsByName[groupname]) then
+        return mist.DBs.groupsByName[groupname].coalition
+    else
+        return nil
+    end
 end
 
+---------------------------------------------------------
+-- Destroy group without triggering events
+---------------------------------------------------------
 function industry.destroy(gpName)
     local _group = Group.getByName(gpName)
     Group.destroy(_group)
 end
 
+---------------------------------------------------------
+-- Queue group for respawn
+-- If costs = 0 then the unit is added to the free respawn
+---------------------------------------------------------
 function industry.queueRespawn(gpName, costs)
     local groupdata = mist.getGroupData(gpName)
 
     if (costs == 0) then
         if (groupdata.coalition == "red") then
-            industry.respawnQueueRedFree.push(gpName)
+            industry.respawnQueueRedFree.push({name = gpName, cost = 0})
         else
-            industry.respawnQueueBlueFree.push(gpName)
+            industry.respawnQueueBlueFree.push({name = gpName, cost = 0})
         end
     else
         if (groupdata.coalition == "red") then
@@ -73,6 +108,10 @@ function industry.queueRespawn(gpName, costs)
     end
 end
 
+---------------------------------------------------------
+-- Respan unit only if ressources are available
+-- returns true on success
+---------------------------------------------------------
 function industry.respawn(gpName, costs)
     local groupdata = mist.getGroupData(gpName)
 
@@ -81,9 +120,9 @@ function industry.respawn(gpName, costs)
             industry.ressources.red = industry.ressources.red - costs
             mist.respawnGroup(gpName, true)
             if (costs > 0) then
-                trigger.action.outText(string.format("Respawned RED group %s for %d tons of ressources", gpName, costs), 10)
+                trigger.action.outText(string.format("Respawned red group %s for %d tons of ressources", gpName, costs), 10)
             else
-                trigger.action.outText(string.format("Respawned RED group %s", gpName), 10)
+                trigger.action.outText(string.format("Respawned red group %s", gpName), 10)
             end
             return true
         end
@@ -92,9 +131,9 @@ function industry.respawn(gpName, costs)
             industry.ressources.blue = industry.ressources.blue - costs
             mist.respawnGroup(gpName, true)
             if (costs > 0) then
-                trigger.action.outText(string.format("Respawned BLUE group %s for %d tons of ressources", gpName, costs), 10)
+                trigger.action.outText(string.format("Respawned blue group %s for %d tons of ressources", gpName, costs), 10)
             else
-                trigger.action.outText(string.format("Respawned BLUE group %s", gpName), 10)
+                trigger.action.outText(string.format("Respawned blue group %s", gpName), 10)
             end
             return true
         end
@@ -102,16 +141,42 @@ function industry.respawn(gpName, costs)
     return false
 end
 
-function industry.addRessources(coalition, tons)
-    if (string.match(coalition, "RED")) then
-        industry.ressources.red = industry.ressources.red + tons
-    else
-        industry.ressources.blue = industry.ressources.blue + tons
-    end
-
+---------------------------------------------------------
+-- Add ressources to coalition from transports
+-- Used e.g. from landing trigger in mission editor when
+-- air units reach destination
+---------------------------------------------------------
+function industry.addRessourcesTransport(coalition, tons)
     trigger.action.outText(string.format("A %s transport with %d tons of ressources arrived at its destination", coalition, tons), 5)
+    industry.addRessources(coalition, tons)
 end
 
+---------------------------------------------------------
+-- Add ressources to coalition
+-- Central function to add ressources
+-- Limits ressources to storage space
+---------------------------------------------------------
+function industry.addRessources(coalition, tons)
+    if (string.match(coalition, "red")) then
+        industry.ressources.red = industry.ressources.red + tons
+        if (industry.ressources.red > industry.storages.red * 1000) then
+            industry.ressources.red = industry.storages.red * 1000
+            trigger.action.outText("RED storages are full", 3)
+        end
+    else
+        industry.ressources.blue = industry.ressources.blue + tons
+        if (industry.ressources.blue > industry.storages.blue * 1000) then
+            industry.ressources.blue = industry.storages.blue * 1000
+            trigger.action.outText("BLUE storages are full", 3)
+        end
+    end
+end
+
+---------------------------------------------------------
+-- Add ressources from convoy
+-- multiplys tonsEach with (still) existing units of type
+-- to add to ressources. E.g. without trucks 0 delivery
+---------------------------------------------------------
 function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
     local _group = Group.getByName(groupName)
     local _addRessources = 0
@@ -126,15 +191,18 @@ function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
         end
 
         if (_group:getCoalition() == 1) then
-            industry.ressources.red = industry.ressources.red + _addRessources
             trigger.action.outText(string.format("A RED convoy with %d tons of ressources arrived at its destination", _addRessources), 5)
-        else
-            industry.ressources.blue = industry.ressources.blue + _addRessources
+            industry.addRessources("red", _addRessources)
+        else            
             trigger.action.outText(string.format("A BLUE convoy with %d tons of ressources arrived at its destination", _addRessources), 5)
+            industry.addRessources("blue", _addRessources)
         end
     end
 end
 
+---------------------------------------------------------
+-- Destroy storage space and remove ressources
+---------------------------------------------------------
 function industry.destroyStorage(coalition)
     if (string.match(coalition, "red") and industry.storages.red > 0) then
         industry.ressources.red = industry.ressources.red - math.floor(industry.ressources.red / industry.storages.red)
@@ -151,25 +219,33 @@ function industry.destroyStorage(coalition)
     end
 end
 
+---------------------------------------------------------
+-- Add group to automatically respawn handler
+-- Used from mision editor and/or init script
+---------------------------------------------------------
 function industry.addRespawnGroup(name, cost)
     industry.respawnGroup[name] = cost
 end
 
+---------------------------------------------------------
+-- Production loop
+-- adds ressources from factories
+-- also counts factories and storages
+---------------------------------------------------------
 function industry.productionLoop()
     trigger.action.outText("Industry ressources arrived", 5)
-    industry.ressources.red = industry.ressources.red + 1
-    industry.ressources.blue = industry.ressources.blue + 1
 
     local _redObjects = coalition.getStaticObjects(1)
-    local _countRedFactories = 0;
+    local _countRedFactories = 0
     local _countRedStorages = 0
+    local _addRessourcesRed = 1
     for k, v in pairs(_redObjects) do
         local _name = v:getName()
         local _type = v:getTypeName()
         local _health = v:getLife()
 
         if (string.match(_name, "Factory.*") and _health > 1) then
-            industry.ressources.red = industry.ressources.red + 10	 
+            _addRessourcesRed = _addRessourcesRed + 10	 
             _countRedFactories = _countRedFactories + 1;   
 		end
 
@@ -179,17 +255,19 @@ function industry.productionLoop()
     end
     industry.factories.red = _countRedFactories
     industry.storages.red = _countRedStorages
+    industry.addRessources("red", _addRessourcesRed)
 
     local _blueObjects = coalition.getStaticObjects(2)
-    local _countBlueFactories = 0;
+    local _countBlueFactories = 0
     local _countBlueStorages = 0
+    local _addRessourcesBlue = 1
     for k, v in pairs(_blueObjects) do
         local _name = v:getName()
         local _type = v:getTypeName()
         local _health = v:getLife()
 
         if (string.match(_name, "Factory.*") and _health > 1) then
-            industry.ressources.blue = industry.ressources.blue + 10 
+            _addRessourcesBlue = _addRessourcesBlue + 10 
             _countBlueFactories = _countBlueFactories + 1
 		end
 
@@ -199,79 +277,117 @@ function industry.productionLoop()
     end
     industry.factories.blue = _countBlueFactories
     industry.storages.blue = _countBlueStorages
+    industry.addRessources("blue", _addRessourcesBlue)
 
-    if (industry.ressources.red > industry.storages.red * 1000) then
-        industry.ressources.red = industry.storages.red * 1000
-        trigger.action.outText("RED storages are full", 3)
+    trigger.action.outText(string.format("BLUE (%d/%d): %d tons    RED (%d/%d): %d tons", industry.factories.blue, industry.storages.blue, industry.ressources.blue, industry.factories.red, industry.storages.red, industry.ressources.red), 10)
+end
+
+---------------------------------------------------------
+-- Checks periodically if units can spawn
+-- checks free units (0 cost) independently
+-- only one unit per queue spawns until next scheduled run
+---------------------------------------------------------
+function industry.respawnLoop()
+    local _blueGroup = industry.respawnQueueBlue.get()
+    if (_blueGroup) then
+        if (mist.groupIsDead(_blueGroup.name) or industry.respawnTriesBlue > 1) then
+            if (industry.respawn(_blueGroup.name, _blueGroup.cost)) then
+                industry.respawnQueueBlue.pop()
+                trigger.action.setUserFlag(_blueGroup.name .. '_respawn', true)
+                industry.respawnTriesBlue = 0
+            end
+        else
+            env.info(string.format("Group %s not dead for respawning. Retry no. %d", _blueGroup.name, industry.respawnTriesBlue), false)
+            industry.respawnTriesBlue = industry.respawnTriesBlue + 1
+        end
     end
 
-    if (industry.ressources.blue > industry.storages.blue * 1000) then
-        industry.ressources.blue = industry.storages.blue * 1000
-        trigger.action.outText("BLUE storages are full", 3)
+    local _blueGroupFree = industry.respawnQueueBlueFree.pop()
+    if (_blueGroupFree) then
+        industry.respawn(_blueGroupFree.name, 0)
+        trigger.action.setUserFlag(_blueGroupFree.name .. '_respawn', true)
+    end
+    
+    local _redGroup = industry.respawnQueueRed.get()
+    if (_redGroup) then
+        if (mist.groupIsDead(_redGroup.name) or industry.respawnTriesRed > 1) then
+            if (industry.respawn(_redGroup.name, _redGroup.cost)) then
+                industry.respawnQueueRed.pop()
+                trigger.action.setUserFlag(_redGroup.name .. '_respawn', true)
+            end
+        else
+            env.info(string.format("Group %s not dead for respawning. Retry no. %d", _redGroup.name, industry.respawnTriesRed), false)
+            industry.respawnTriesRed = industry.respawnTriesRed + 1
+        end
+    end
+
+    local _redGroupFree = industry.respawnQueueRedFree.pop()
+    if (_redGroupFree) then
+        industry.respawn(_redGroupFree.name, 0)
+        trigger.action.setUserFlag(_redGroupFree.name .. '_respawn', true)
     end
 
     trigger.action.outText(string.format("BLUE (%d/%d): %d tons    RED (%d/%d): %d tons", industry.factories.blue, industry.storages.blue, industry.ressources.blue, industry.factories.red, industry.storages.red, industry.ressources.red), 10)
 end
 
-function industry.respawnLoop()
-    local _blueGroup = industry.respawnQueueBlue.get()
-    if (_blueGroup and mist.groupIsDead(_blueGroup.name) and industry.respawn(_blueGroup.name, _blueGroup.cost)) then
-        industry.respawnQueueBlue.pop()
-        trigger.action.setUserFlag(_blueGroup.name .. '_respawn', true)
-    end
-
-    local _blueGroupFree = industry.respawnQueueBlueFree.pop()
-    if (_blueGroupFree) then
-        industry.respawn(_blueGroupFree, 0)
-        trigger.action.setUserFlag(_blueGroupFree .. '_respawn', true)
-    end
-    
-    local _redGroup = industry.respawnQueueRed.get()
-    if (_redGroup and mist.groupIsDead(_redGroup.name) and industry.respawn(_redGroup.name, _redGroup.cost)) then
-        industry.respawnQueueRed.pop()
-        trigger.action.setUserFlag(_redGroup.name .. '_respawn', true)
-    end
-
-    local _redGroupFree = industry.respawnQueueRedFree.pop()
-    if (_redGroupFree) then
-        industry.respawn(_redGroupFree, 0)
-        trigger.action.setUserFlag(_redGroupFree .. '_respawn', true)
+---------------------------------------------------------
+-- Loop to check for unhandled dead groups
+-- Occur when AI did emergency landings and just despawn
+---------------------------------------------------------
+function industry.checkDeadGroups()
+    for _groupname, _cost in pairs(industry.respawnGroup) do
+        if (mist.groupIsDead(_groupname)) then
+            env.info(string.format("Found unhandled dead group:%s coalition:%s cost:%d, requeuing", _groupname, industry.getCoalitionByGroupname(_groupname), _cost), false)
+            if (industry.getCoalitionByGroupname(_groupname) == 'red') then                
+                industry.respawnQueueRed.push({name = _groupname, cost = _cost})
+            else if (industry.getCoalitionByGroupname(_groupname) == 'blue') then
+                industry.respawnQueueBlue.push({name = _groupname, cost = _cost})
+                end
+            end
+        end
     end
 end
 
+---------------------------------------------------------
+-- Event handler for landings and units lost
+-- despawns landed units when engine shuts down
+-- Queues groups when last unit of group dies
+---------------------------------------------------------
 industry.eventHandler = {}
 function industry.eventHandler:onEvent(event)
     if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or event.id == world.event.S_EVENT_UNIT_LOST) then
-        local _name = event.initiator:getName()        
+        local _name = event.initiator:getName()
+        env.info(string.format("Handling event ID %d Unit %s", event.id, _name), false)
         local _groupname = industry.getGroupNameByUnitName(_name)
-        local _category = mist.getGroupData(_groupname).category        
 
-        if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
-            if (industry.respawnGroup[_groupname]) then  
-                local _unit = Unit.getByName(_name)          
-                _unit:destroy()
-            end
-            trigger.action.setUserFlag(_name .. '_landed', true) 
-        end
-
-        if (_category == 'static') then
-            if (string.match(_name,'Factory.*')) then
-                trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
-            end
-
-            if (string.match(_name,'Storage.*')) then
-                industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
-            end
-        end
-
-        local _group = Group.getByName(_groupname)
-        if ((_group == nil or #_group:getUnits() < 2) and industry.respawnGroup[_groupname]) then
-            if (industry.getCoalitionByGroupname(_groupname) == 'red') then
-                industry.respawnQueueRed.push({name = _groupname, cost = industry.respawnGroup[_groupname]})
-            else if (industry.getCoalitionByGroupname(_groupname) == 'blue') then
-                industry.respawnQueueBlue.push({name = _groupname, cost = industry.respawnGroup[_groupname]})
+        if (_groupname) then
+            if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
+                if (industry.respawnGroup[_groupname]) then  
+                    local _unit = Unit.getByName(_name)          
+                    if (_unit) then _unit:destroy() end
                 end
-            end        
+                trigger.action.setUserFlag(_name .. '_landed', true) 
+            end
+
+            if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'static') then
+                if (string.match(_name,'Factory.*')) then
+                    trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+                end
+
+                if (string.match(_name,'Storage.*')) then
+                    industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
+                end
+            end
+
+            local _group = Group.getByName(_groupname)
+            if ((_group == nil or #_group:getUnits() < 2) and industry.respawnGroup[_groupname]) then
+                if (industry.getCoalitionByGroupname(_groupname) == 'red') then
+                    industry.respawnQueueRed.push({name = _groupname, cost = industry.respawnGroup[_groupname]})
+                else if (industry.getCoalitionByGroupname(_groupname) == 'blue') then
+                    industry.respawnQueueBlue.push({name = _groupname, cost = industry.respawnGroup[_groupname]})
+                    end
+                end        
+            end     
         end
     end
 end
@@ -280,5 +396,6 @@ world.addEventHandler(industry.eventHandler)
 
 mist.scheduleFunction(industry.productionLoop,{} , timer.getTime() + 1, 300)
 mist.scheduleFunction(industry.respawnLoop,{} , timer.getTime() + 30, 30)
+mist.scheduleFunction(industry.checkDeadGroups,{} , timer.getTime() + 30, 300)
 
 env.info('Industry ' .. industry.version .. ' initialized')
