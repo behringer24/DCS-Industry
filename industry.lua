@@ -3,7 +3,7 @@
 if (industry ~= nil) then return 0 end
 industry = {}
 
-industry.version = "v0.4.0"
+industry.version = "v0.6.0"
 industry.ressources = {red = 200, blue = 200}
 industry.factories = {red= 1, blue = 1}
 industry.storages = {red= 1, blue = 1}
