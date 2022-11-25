@@ -11,6 +11,15 @@ industry.respawnGroup = {}
 industry.respawnTriesBlue = 0
 industry.respawnTriesRed = 0
 
+industry.config = {
+    factoryProduction = 30,
+    storageCapacity = 1000,
+    productionLoopTime = 300,
+    respawnLoopTime = 30,
+    checkDeadGroupsTime = 300,
+    respawnRetriesOnQueue = 2,
+}
+
 ---------------------------------------------------------
 -- Queue implementation
 -- element needs to have a name field to block from
@@ -32,7 +41,7 @@ industry.Queue = function()
 
     function queue.get()
         if (head > last) then return nil end
-        env.info("Read "..queue[head].name.." from queue")
+        env.info("Read "..queue[head].name.." in queue")
         return queue[head]
     end
     
@@ -159,14 +168,14 @@ end
 function industry.addRessources(coalition, tons)
     if (string.match(coalition, "red")) then
         industry.ressources.red = industry.ressources.red + tons
-        if (industry.ressources.red > industry.storages.red * 1000) then
-            industry.ressources.red = industry.storages.red * 1000
+        if (industry.ressources.red > industry.storages.red * industry.config.storageCapacity) then
+            industry.ressources.red = industry.storages.red * industry.config.storageCapacity
             trigger.action.outText("RED storages are full", 3)
         end
     else
         industry.ressources.blue = industry.ressources.blue + tons
-        if (industry.ressources.blue > industry.storages.blue * 1000) then
-            industry.ressources.blue = industry.storages.blue * 1000
+        if (industry.ressources.blue > industry.storages.blue * industry.config.storageCapacity) then
+            industry.ressources.blue = industry.storages.blue * industry.config.storageCapacity
             trigger.action.outText("BLUE storages are full", 3)
         end
     end
@@ -245,7 +254,7 @@ function industry.productionLoop()
         local _health = v:getLife()
 
         if (string.match(_name, "Factory.*") and _health > 1) then
-            _addRessourcesRed = _addRessourcesRed + 10	 
+            _addRessourcesRed = _addRessourcesRed + industry.config.factoryProduction
             _countRedFactories = _countRedFactories + 1;   
 		end
 
@@ -267,7 +276,7 @@ function industry.productionLoop()
         local _health = v:getLife()
 
         if (string.match(_name, "Factory.*") and _health > 1) then
-            _addRessourcesBlue = _addRessourcesBlue + 10 
+            _addRessourcesBlue = _addRessourcesBlue + industry.config.factoryProduction 
             _countBlueFactories = _countBlueFactories + 1
 		end
 
@@ -290,11 +299,11 @@ end
 function industry.respawnLoop()
     local _blueGroup = industry.respawnQueueBlue.get()
     if (_blueGroup) then
-        if (mist.groupIsDead(_blueGroup.name) or industry.respawnTriesBlue > 1) then
+        if (mist.groupIsDead(_blueGroup.name) or industry.respawnTriesBlue > industry.config.respawnRetriesOnQueue - 1) then
             if (industry.respawn(_blueGroup.name, _blueGroup.cost)) then
                 industry.respawnQueueBlue.pop()
-                trigger.action.setUserFlag(_blueGroup.name .. '_respawn', true)
                 industry.respawnTriesBlue = 0
+                trigger.action.setUserFlag(_blueGroup.name .. '_respawn', true)                
             end
         else
             env.info(string.format("Group %s not dead for respawning. Retry no. %d", _blueGroup.name, industry.respawnTriesBlue), false)
@@ -310,9 +319,10 @@ function industry.respawnLoop()
     
     local _redGroup = industry.respawnQueueRed.get()
     if (_redGroup) then
-        if (mist.groupIsDead(_redGroup.name) or industry.respawnTriesRed > 1) then
+        if (mist.groupIsDead(_redGroup.name) or industry.respawnTriesRed > industry.config.respawnRetriesOnQueue - 1) then
             if (industry.respawn(_redGroup.name, _redGroup.cost)) then
                 industry.respawnQueueRed.pop()
+                industry.respawnTriesRed = 0
                 trigger.action.setUserFlag(_redGroup.name .. '_respawn', true)
             end
         else
@@ -337,13 +347,8 @@ end
 function industry.checkDeadGroups()
     for _groupname, _cost in pairs(industry.respawnGroup) do
         if (mist.groupIsDead(_groupname)) then
-            env.info(string.format("Found unhandled dead group:%s coalition:%s cost:%d, requeuing", _groupname, industry.getCoalitionByGroupname(_groupname), _cost), false)
-            if (industry.getCoalitionByGroupname(_groupname) == 'red') then                
-                industry.respawnQueueRed.push({name = _groupname, cost = _cost})
-            else if (industry.getCoalitionByGroupname(_groupname) == 'blue') then
-                industry.respawnQueueBlue.push({name = _groupname, cost = _cost})
-                end
-            end
+            env.info(string.format("Found unhandled dead group:%s coalition:%s cost:%d, try to requeue", _groupname, industry.getCoalitionByGroupname(_groupname), _cost), false)
+            industry.queueRespawn(_groupname, _cost)
         end
     end
 end
@@ -355,7 +360,9 @@ end
 ---------------------------------------------------------
 industry.eventHandler = {}
 function industry.eventHandler:onEvent(event)
-    if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or event.id == world.event.S_EVENT_UNIT_LOST) then
+    if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or 
+            event.id == world.event.S_EVENT_UNIT_LOST or
+            event.id == world.event.S_EVENT_EJECTION) then
         local _name = event.initiator:getName()
         env.info(string.format("Handling event ID %d Unit %s", event.id, _name), false)
         local _groupname = industry.getGroupNameByUnitName(_name)
@@ -364,9 +371,25 @@ function industry.eventHandler:onEvent(event)
             if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
                 if (industry.respawnGroup[_groupname]) then  
                     local _unit = Unit.getByName(_name)          
-                    if (_unit) then _unit:destroy() end
+                    if (_unit) then
+                        _unit:destroy()
+                    else
+                        env.error(string.format("Error while handling engine shutdown event (19) Unit %s not found.", _name), false)
+                    end
+                    trigger.action.setUserFlag(_name .. '_landed', true)
                 end
-                trigger.action.setUserFlag(_name .. '_landed', true) 
+            end
+
+            if (event.id == world.event.S_EVENT_EJECTION) then
+                if (industry.respawnGroup[_groupname]) then
+                    local _unit = Unit.getByName(_name)
+                    if (_unit) then
+                        trigger.action.explosion(_unit:getPosition().p, 400)
+                        env.info(string.format("Pilot ejected from unit %s, explode it", _name), false)
+                    else
+                        env.info(string.format("Unit %s not found after ejection of pilot (already dead?)", _name), false)
+                    end
+                end
             end
 
             if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'static') then
@@ -381,21 +404,25 @@ function industry.eventHandler:onEvent(event)
 
             local _group = Group.getByName(_groupname)
             if ((_group == nil or #_group:getUnits() < 2) and industry.respawnGroup[_groupname]) then
-                if (industry.getCoalitionByGroupname(_groupname) == 'red') then
-                    industry.respawnQueueRed.push({name = _groupname, cost = industry.respawnGroup[_groupname]})
-                else if (industry.getCoalitionByGroupname(_groupname) == 'blue') then
-                    industry.respawnQueueBlue.push({name = _groupname, cost = industry.respawnGroup[_groupname]})
-                    end
-                end        
+                industry.queueRespawn(_groupname, industry.respawnGroup[_groupname])
             end     
         end
     end
 end
 
-world.addEventHandler(industry.eventHandler)
+function industry.scheduleHandlers()
+    world.addEventHandler(industry.eventHandler)
+    env.info('Industry eventHandler initialized')
 
-mist.scheduleFunction(industry.productionLoop,{} , timer.getTime() + 1, 300)
-mist.scheduleFunction(industry.respawnLoop,{} , timer.getTime() + 30, 30)
-mist.scheduleFunction(industry.checkDeadGroups,{} , timer.getTime() + 30, 300)
+    mist.scheduleFunction(industry.productionLoop,{} , timer.getTime() + 1, industry.config.productionLoopTime)
+    env.info(string.format('Industry productionLoop initialized (%d seconds)', industry.config.productionLoopTime))
 
+    mist.scheduleFunction(industry.respawnLoop,{} , timer.getTime() + 35, industry.config.respawnLoopTime)
+    env.info(string.format('Industry respawnLoop initialized (%d seconds)', industry.config.respawnLoopTime))
+
+    mist.scheduleFunction(industry.checkDeadGroups,{} , timer.getTime() + 305, industry.config.checkDeadGroupsTime)    
+    env.info(string.format('Industry checkDeadGroups initialized (%d seconds)', industry.config.checkDeadGroupsTime))
+end
+
+mist.scheduleFunction(industry.scheduleHandlers,{} , timer.getTime() + 5)
 env.info('Industry ' .. industry.version .. ' initialized')
