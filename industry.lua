@@ -353,6 +353,23 @@ function industry.checkDeadGroups()
     end
 end
 
+function industry.radioStatistics(groupId, groupName)    
+    trigger.action.outTextForGroup(groupId, string.format("BLUE (%d/%d): %d tons    RED (%d/%d): %d tons", industry.factories.blue, industry.storages.blue, industry.ressources.blue, industry.factories.red, industry.storages.red, industry.ressources.red), 10)
+end
+
+function industry.addRadioMenu()
+    local groups = {}
+    for k,v in pairs(mist.DBs.humansByName) do
+        groups[v.groupId] = v.groupName;
+    end
+    
+
+    for k,v in pairs(groups) do
+        local main = missionCommands.addSubMenuForGroup(k, 'Industry')
+        missionCommands.addCommandForGroup(k, v..' Get current statistics', main, industry.radioStatistics, {groupId = k, groupname = v})
+    end
+end
+
 ---------------------------------------------------------
 -- Event handler for landings and units lost
 -- despawns landed units when engine shuts down
@@ -424,5 +441,6 @@ function industry.scheduleHandlers()
     env.info(string.format('Industry checkDeadGroups initialized (%d seconds)', industry.config.checkDeadGroupsTime))
 end
 
+industry.addRadioMenu()
 mist.scheduleFunction(industry.scheduleHandlers,{} , timer.getTime() + 5)
 env.info('Industry ' .. industry.version .. ' initialized')
