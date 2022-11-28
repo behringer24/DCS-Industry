@@ -353,7 +353,7 @@ function industry.checkDeadGroups()
     end
 end
 
-function industry.radioStatistics(groupId, groupName)    
+function industry.radioStatistics(groupId)    
     trigger.action.outTextForGroup(groupId, string.format("BLUE (%d/%d): %d tons    RED (%d/%d): %d tons", industry.factories.blue, industry.storages.blue, industry.ressources.blue, industry.factories.red, industry.storages.red, industry.ressources.red), 10)
 end
 
@@ -363,10 +363,10 @@ function industry.addRadioMenu()
         groups[v.groupId] = v.groupName;
     end
     
-
     for k,v in pairs(groups) do
         local main = missionCommands.addSubMenuForGroup(k, 'Industry')
-        missionCommands.addCommandForGroup(k, v..' Get current statistics', main, industry.radioStatistics, {groupId = k, groupname = v})
+        missionCommands.addCommandForGroup(k, 'Get current statistics', main, industry.radioStatistics, k)
+        env.info(string.format("Add radioStatistics command for group %s (%d)", v, k))
     end
 end
 
