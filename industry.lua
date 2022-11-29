@@ -379,8 +379,7 @@ industry.eventHandler = {}
 function industry.eventHandler:onEvent(event)
     if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or 
             event.id == world.event.S_EVENT_UNIT_LOST or
-            event.id == world.event.S_EVENT_EJECTION or
-            event.id == world.event.S_EVENT_BDA) then
+            event.id == world.event.S_EVENT_EJECTION) then
         local _name = event.initiator:getName()
         env.info(string.format("Handling event ID %d Unit %s", event.id, _name), false)
         local _groupname = industry.getGroupNameByUnitName(_name)
@@ -388,47 +387,38 @@ function industry.eventHandler:onEvent(event)
         if (_groupname) then
             if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
                 if (industry.respawnGroup[_groupname]) then  
-                    local _unit = Unit.getByName(_name)          
-                    if (_unit) then
-                        _unit:destroy()
-                    else
-                        env.error(string.format("Error while handling engine shutdown event (19) Unit %s not found.", _name), false)
-                    end
+                    event.initiator:destroy()
                     trigger.action.setUserFlag(_name .. '_landed', true)
                 end
             end
 
             if (event.id == world.event.S_EVENT_EJECTION) then
-                if (industry.respawnGroup[_groupname]) then
-                    local _unit = Unit.getByName(_name)
-                    if (_unit) then
-                        trigger.action.explosion(_unit:getPosition().p, 400)
-                        env.info(string.format("Pilot ejected from unit %s, explode it", _name), false)
-                    else
-                        env.info(string.format("Unit %s not found after ejection of pilot (already dead?)", _name), false)
+                if (industry.respawnGroup[_groupname]) then                    
+                    trigger.action.explosion(event.initiator:getPosition().p, 400)
+                    env.info(string.format("Pilot ejected from unit %s, explode it", _name), false)
+                end
+            end
+
+            if (event.id == world.event.S_EVENT_UNIT_LOST) then
+                if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'static') then
+                    if (string.match(_name,'Factory.*')) then
+                        local _pos = event.initiator:getPosition().p
+                        trigger.action.effectSmokeBig(_pos, 3, 0.75)
+                        trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+                    end
+
+                    if (string.match(_name,'Storage.*')) then
+                        local _pos = event.initiator:getPosition().p
+                        trigger.action.effectSmokeBig(_pos, 3, 0.5)
+                        industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
                     end
                 end
-            end
 
-            if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'static') then
-                if (string.match(_name,'Factory.*')) then
-                    trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
-                end
-
-                if (string.match(_name,'Storage.*')) then
-                    industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
-                end
-            end
-
-            if (event.id == world.event.S_EVENT_BDA) then
-                local _targetgroupname = industry.getGroupNameByUnitName(_name)
-                if (mist.getGroupData(_targetgroupname) and mist.getGroupData(_targetgroupname).category == 'vehicle') then
-                    local _targetname = event.target:getName()
-                    local _pos = event.target:getPosition().p
-                    if (_pos) then                    
-                        --_pos.y = land.getHeight({x = _pos.x, y = _pos.z})  -- compensate for ground level
-                        trigger.action.effectSmokeBig(_pos, 1, 0.75)                        
-                        env.info(string.format("Spawn smoke effect at unit location %s", _targetname))
+                if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'vehicle') then
+                    local _pos = event.initiator:getPosition().p
+                    if (_pos) then
+                        trigger.action.effectSmokeBig(_pos, 2, 0.5)
+                        env.info(string.format("Spawn smoke effect at unit location %s", _name))
                     end
                 end
             end
