@@ -353,7 +353,7 @@ function industry.checkDeadGroups()
     end
 end
 
-function industry.radioStatistics(groupId, groupName)    
+function industry.radioStatistics(groupId)    
     trigger.action.outTextForGroup(groupId, string.format("BLUE (%d/%d): %d tons    RED (%d/%d): %d tons", industry.factories.blue, industry.storages.blue, industry.ressources.blue, industry.factories.red, industry.storages.red, industry.ressources.red), 10)
 end
 
@@ -363,10 +363,10 @@ function industry.addRadioMenu()
         groups[v.groupId] = v.groupName;
     end
     
-
     for k,v in pairs(groups) do
         local main = missionCommands.addSubMenuForGroup(k, 'Industry')
-        missionCommands.addCommandForGroup(k, v..' Get current statistics', main, industry.radioStatistics, {groupId = k, groupname = v})
+        missionCommands.addCommandForGroup(k, 'Get current statistics', main, industry.radioStatistics, k)
+        env.info(string.format("Add radioStatistics command for group %s (%d)", v, k))
     end
 end
 
@@ -379,7 +379,8 @@ industry.eventHandler = {}
 function industry.eventHandler:onEvent(event)
     if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or 
             event.id == world.event.S_EVENT_UNIT_LOST or
-            event.id == world.event.S_EVENT_EJECTION) then
+            event.id == world.event.S_EVENT_EJECTION or
+            event.id == world.event.S_EVENT_BDA) then
         local _name = event.initiator:getName()
         env.info(string.format("Handling event ID %d Unit %s", event.id, _name), false)
         local _groupname = industry.getGroupNameByUnitName(_name)
@@ -416,6 +417,19 @@ function industry.eventHandler:onEvent(event)
 
                 if (string.match(_name,'Storage.*')) then
                     industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
+                end
+            end
+
+            if (event.id == world.event.S_EVENT_BDA) then
+                local _targetgroupname = industry.getGroupNameByUnitName(_name)
+                if (mist.getGroupData(_targetgroupname) and mist.getGroupData(_targetgroupname).category == 'vehicle') then
+                    local _targetname = event.target:getName()
+                    local _pos = event.target:getPosition().p
+                    if (_pos) then                    
+                        --_pos.y = land.getHeight({x = _pos.x, y = _pos.z})  -- compensate for ground level
+                        trigger.action.effectSmokeBig(_pos, 1, 0.75)                        
+                        env.info(string.format("Spawn smoke effect at unit location %s", _targetname))
+                    end
                 end
             end
 
