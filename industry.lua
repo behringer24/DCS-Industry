@@ -414,6 +414,9 @@ function industry.checkDeadGroups()
     end
 end
 
+---------------------------------------------------------
+-- Called when group asks for industry statistics
+---------------------------------------------------------
 function industry.radioStatistics(groupId)    
     trigger.action.outTextForGroup(groupId, string.format(
         "BLUE Fact: %2d   Labs: %2d    Stor: %2d    Ress: %4d\n"..
@@ -423,6 +426,9 @@ function industry.radioStatistics(groupId)
         ), 20)
 end
 
+---------------------------------------------------------
+-- Add radio menu to all groups with human player slots
+---------------------------------------------------------
 function industry.addRadioMenu()
     local groups = {}
     for k,v in pairs(mist.DBs.humansByName) do
@@ -443,6 +449,7 @@ end
 ---------------------------------------------------------
 industry.eventHandler = {}
 function industry.eventHandler:onEvent(event)
+    -- events to handle
     if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or 
             event.id == world.event.S_EVENT_UNIT_LOST or
             event.id == world.event.S_EVENT_EJECTION) then
@@ -451,6 +458,7 @@ function industry.eventHandler:onEvent(event)
         local _groupname = industry.getGroupNameByUnitName(_name)
 
         if (_groupname) then
+            -- plane landed and engine shut off. Despawn unit to enable respawn of group
             if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
                 if (industry.respawnGroup[_groupname]) then  
                     event.initiator:destroy()
@@ -458,6 +466,7 @@ function industry.eventHandler:onEvent(event)
                 end
             end
 
+            -- pilot jumps from plane. Explode plane to handle landed helis that do not despawn
             if (event.id == world.event.S_EVENT_EJECTION) then
                 if (industry.respawnGroup[_groupname]) then                    
                     trigger.action.explosion(event.initiator:getPosition().p, 400)
@@ -465,8 +474,10 @@ function industry.eventHandler:onEvent(event)
                 end
             end
 
-            if (event.id == world.event.S_EVENT_UNIT_LOST) then
+            -- unit is lost / pre-destroyed
+            if (event.id == world.event.S_EVENT_UNIT_LOST) then                
                 if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'static') then
+                    -- handle factory destruction
                     if (string.match(_name,'Factory.*')) then
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.75)
@@ -474,6 +485,7 @@ function industry.eventHandler:onEvent(event)
                         trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
                     end
 
+                    -- handle storage destruction
                     if (string.match(_name,'Storage.*')) then
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
@@ -489,6 +501,7 @@ function industry.eventHandler:onEvent(event)
                     end
                 end
 
+                -- vehicle destruction adds a fire and smoke
                 if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'vehicle') then
                     local _pos = event.initiator:getPosition().p
                     if (_pos) then
@@ -498,6 +511,7 @@ function industry.eventHandler:onEvent(event)
                 end
             end
 
+            -- if group has only this one dead unit left, queue for respawn
             local _group = Group.getByName(_groupname)
             if ((_group == nil or #_group:getUnits() < 2) and industry.respawnGroup[_groupname]) then
                 industry.queueRespawn(_groupname, industry.respawnGroup[_groupname])
@@ -506,6 +520,11 @@ function industry.eventHandler:onEvent(event)
     end
 end
 
+---------------------------------------------------------
+-- Initialize handlers and loops
+-- called 5sec deferred to enable settings
+-- from mission designer
+---------------------------------------------------------
 function industry.scheduleHandlers()
     world.addEventHandler(industry.eventHandler)
     env.info('Industry eventHandler initialized')
