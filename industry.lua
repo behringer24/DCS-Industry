@@ -3,15 +3,6 @@
 if (industry ~= nil) then return 0 end
 industry = {}
 
-industry.version = "v0.7.0"
-industry.ressources = {red = 200, blue = 200}
-industry.factories = {red= 1, blue = 1}
-industry.storages = {red= 1, blue = 1}
-industry.labs = {red = 0, blue = 0}
-industry.respawnGroup = {}
-industry.respawnTriesBlue = 0
-industry.respawnTriesRed = 0
-
 industry.config = {
     factoryProduction = 30,
     storageCapacity = 1000,
@@ -21,6 +12,17 @@ industry.config = {
     checkDeadGroupsTime = 300,
     respawnRetriesOnQueue = 2,
 }
+
+industry.version = "v0.8.0"
+industry.ressources = {red = 200, blue = 200}
+industry.factories = {red= 1, blue = 1}
+industry.storages = {red= 1, blue = 1}
+industry.labs = {red = 0, blue = 0}
+industry.respawnGroup = {}
+industry.respawnTriesBlue = 0
+industry.respawnTriesRed = 0
+industry.winner = nil
+industry.winCountdown = 10
 
 ---------------------------------------------------------
 -- Queue implementation
@@ -212,21 +214,61 @@ function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
 end
 
 ---------------------------------------------------------
+-- Called when all storages are destroyed on one side
+-- Loops to update countdown until restart
+---------------------------------------------------------
+function industry.winMission(winner)
+    if (industry.winner == nil) then
+        industry.winner = winner
+
+        if (industry.winner == coalition.side.RED) then
+            industry.loser = coalition.side.BLUE
+        else
+            industry.loser = coalition.side.RED
+        end
+    end
+
+    trigger.action.outTextForCoalition(industry.winner, string.format("MISSION ACCOMPLISHED. RTB. Mission ends in %d minutes", industry.winCountdown), 10)
+    trigger.action.outTextForCoalition(industry.loser,  string.format("MISSION FAILED. RTB. Mission ends in %d minutes", industry.winCountdown), 10)
+
+    industry.winCountdown = industry.winCountdown - 1
+
+    if (industry.winCountdown < 0) then
+        if (industry.winner == coalition.side.RED) then
+            trigger.action.setUserFlag('missionWinRed', true)
+        else
+            trigger.action.setUserFlag('missionWinBlue', true)
+        end
+        net.load_next_mission()
+    end
+end
+
+---------------------------------------------------------
 -- Destroy storage space and remove ressources
 ---------------------------------------------------------
-function industry.destroyStorage(coalition)
-    if (string.match(coalition, "red") and industry.storages.red > 0) then
+function industry.destroyStorage(coa)
+    if (string.match(coa, "red") and industry.storages.red > 0) then
         industry.ressources.red = industry.ressources.red - math.floor(industry.ressources.red / industry.storages.red)
         industry.storages.red = industry.storages.red - 1
 
-        trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 10)   
+        if (industry.storages.red == 0) then
+            mist.scheduleFunction(industry.winMission,{coalition.side.BLUE} , timer.getTime() + 1, 60)
+            trigger.action.outText(string.format("All RED storages have been destroyed", industry.ressources.red), 10)
+        else
+            trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 10)   
+        end
     end
 
-    if (string.match(coalition, "blue") and industry.storages.blue > 0) then
+    if (string.match(coa, "blue") and industry.storages.blue > 0) then
         industry.ressources.blue = industry.ressources.blue - math.floor(industry.ressources.blue / industry.storages.blue)
         industry.storages.blue = industry.storages.blue - 1
 
-        trigger.action.outText(string.format("A BLUE storage has been destroyed. %d tons ressources left", industry.ressources.blue), 10)   
+        if (industry.storages.blue == 0) then
+            mist.scheduleFunction(industry.winMission,{coalition.side.RED} , timer.getTime() + 1, 60)
+            trigger.action.outText(string.format("All BLUE storages have been destroyed", industry.ressources.red), 10)
+        else
+            trigger.action.outText(string.format("A BLUE storage has been destroyed. %d tons ressources left", industry.ressources.blue), 10)  
+        end 
     end
 end
 
@@ -428,18 +470,21 @@ function industry.eventHandler:onEvent(event)
                     if (string.match(_name,'Factory.*')) then
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.75)
+                        trigger.action.setUserFlag(_name .. '_destroyed', true)
                         trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
                     end
 
                     if (string.match(_name,'Storage.*')) then
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
+                        trigger.action.setUserFlag(_name .. '_destroyed', true)
                         industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
                     end
 
                     if (string.match(_name,'Laboratory.*')) then
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
+                        trigger.action.setUserFlag(_name .. '_destroyed', true)
                         trigger.action.outText(string.format("Laboratory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
                     end
                 end
@@ -447,7 +492,7 @@ function industry.eventHandler:onEvent(event)
                 if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'vehicle') then
                     local _pos = event.initiator:getPosition().p
                     if (_pos) then
-                        trigger.action.effectSmokeBig(_pos, 2, 0.5)
+                        trigger.action.effectSmokeBig(_pos, 1, 0.5)
                         env.info(string.format("Spawn smoke effect at unit location %s", _name))
                     end
                 end
