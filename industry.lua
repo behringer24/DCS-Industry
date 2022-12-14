@@ -8,7 +8,7 @@ industry.config = {
     storageCapacity = 1000,
     labsboost = 20,
     productionLoopTime = 300,
-    respawnLoopTime = 30,
+    respawnLoopTime = 60,
     checkDeadGroupsTime = 300,
     respawnRetriesOnQueue = 2,
 }
