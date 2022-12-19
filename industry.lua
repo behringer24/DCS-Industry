@@ -11,18 +11,22 @@ industry.config = {
     respawnLoopTime = 60,
     checkDeadGroupsTime = 300,
     respawnRetriesOnQueue = 2,
+    winCountdownLength = 600,
+    tickets = 100,
 }
 
-industry.version = "v0.8.0"
+industry.version = "v0.9.0"
 industry.ressources = {red = 200, blue = 200}
 industry.factories = {red= 1, blue = 1}
 industry.storages = {red= 1, blue = 1}
 industry.labs = {red = 0, blue = 0}
+industry.hq = {red = 1, blue = 1}
+industry.tickets = {red = 100, blue = 100}
 industry.respawnGroup = {}
 industry.respawnTriesBlue = 0
 industry.respawnTriesRed = 0
 industry.winner = nil
-industry.winCountdown = 10
+industry.winCountdown = 600
 
 ---------------------------------------------------------
 -- Queue implementation
@@ -226,10 +230,18 @@ function industry.winMission(winner)
         else
             industry.loser = coalition.side.RED
         end
+
+        industry.winCountdown = industry.config.winCountdownLength
     end
 
-    trigger.action.outTextForCoalition(industry.winner, string.format("MISSION ACCOMPLISHED. RTB. Mission ends in %d minutes", industry.winCountdown), 10)
-    trigger.action.outTextForCoalition(industry.loser,  string.format("MISSION FAILED. RTB. Mission ends in %d minutes", industry.winCountdown), 10)
+    if (industry.winCountdown > 10) then
+        if (industry.winCountdown % 60 == 0) then
+            trigger.action.outTextForCoalition(industry.winner, string.format("MISSION ACCOMPLISHED. RTB. Mission ends in %d minutes", industry.winCountdown / 60), 10)
+            trigger.action.outTextForCoalition(industry.loser,  string.format("MISSION FAILED. RTB. Mission ends in %d minutes", industry.winCountdown / 60), 10)
+        end
+    else
+        trigger.action.outText(string.format("Mission ends in %d seconds", industry.winCountdown), 3)
+    end
 
     industry.winCountdown = industry.winCountdown - 1
 
@@ -239,6 +251,7 @@ function industry.winMission(winner)
         else
             trigger.action.setUserFlag('missionWinBlue', true)
         end
+        net.missionlist_set_loop(true)
         net.load_next_mission()
     end
 end
@@ -252,7 +265,7 @@ function industry.destroyStorage(coa)
         industry.storages.red = industry.storages.red - 1
 
         if (industry.storages.red == 0) then
-            mist.scheduleFunction(industry.winMission,{coalition.side.BLUE} , timer.getTime() + 1, 60)
+            mist.scheduleFunction(industry.winMission,{coalition.side.BLUE} , timer.getTime() + 1, 1)
             trigger.action.outText(string.format("All RED storages have been destroyed", industry.ressources.red), 10)
         else
             trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 10)   
@@ -264,7 +277,7 @@ function industry.destroyStorage(coa)
         industry.storages.blue = industry.storages.blue - 1
 
         if (industry.storages.blue == 0) then
-            mist.scheduleFunction(industry.winMission,{coalition.side.RED} , timer.getTime() + 1, 60)
+            mist.scheduleFunction(industry.winMission,{coalition.side.RED} , timer.getTime() + 1, 1)
             trigger.action.outText(string.format("All BLUE storages have been destroyed", industry.ressources.red), 10)
         else
             trigger.action.outText(string.format("A BLUE storage has been destroyed. %d tons ressources left", industry.ressources.blue), 10)  
@@ -348,8 +361,12 @@ function industry.productionLoop()
     industry.labs.blue = _countBlueLabs
     industry.addRessources("blue", _addRessourcesBlue + _labsBonusBlue)
 
+    industry.reduceTickets("blue", 1)
+    industry.reduceTickets("red", 1)
+
     trigger.action.outText(string.format("New Ressources produced\n"..
-        "BLUE %d tons + %d bonus   RED %d tons + %d bonus", _addRessourcesBlue, _labsBonusBlue, _addRessourcesRed, _labsBonusRed), 10)
+        "BLUE %d tons + %d labs-bonus   RED %d tons + %d labs-bonus", _addRessourcesBlue, _labsBonusBlue, _addRessourcesRed, _labsBonusRed), 10)
+    trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
 end
 
 ---------------------------------------------------------
@@ -424,6 +441,7 @@ function industry.radioStatistics(groupId)
             industry.factories.blue, industry.labs.blue, industry.storages.blue, industry.ressources.blue,
             industry.factories.red,  industry.labs.red,  industry.storages.red,  industry.ressources.red
         ), 20)
+    trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
 end
 
 ---------------------------------------------------------
@@ -439,6 +457,26 @@ function industry.addRadioMenu()
         local main = missionCommands.addSubMenuForGroup(k, 'Industry')
         missionCommands.addCommandForGroup(k, 'Get current statistics', main, industry.radioStatistics, k)
         env.info(string.format("Add radioStatistics command for group %s (%d)", v, k))
+    end
+end
+
+function industry.reduceTickets(coal, tickets)
+    if (industry.winner == nil) then
+        if (coal == "red") then
+            industry.tickets.red = industry.tickets.red - tickets
+            if (industry.tickets.red < 0) then
+                industry.tickets.red = 0
+                mist.scheduleFunction(industry.winMission,{coalition.side.BLUE} , timer.getTime() + 1, 1)
+            end
+        else
+            industry.tickets.blue = industry.tickets.blue - tickets
+            if (industry.tickets.blue <= 0) then
+                industry.tickets.blue = 0
+                mist.scheduleFunction(industry.winMission,{coalition.side.RED} , timer.getTime() + 1, 1)
+            end
+        end
+
+        trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
     end
 end
 
@@ -483,6 +521,8 @@ function industry.eventHandler:onEvent(event)
                         trigger.action.effectSmokeBig(_pos, 3, 0.75)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
                         trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+
+                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 5)
                     end
 
                     -- handle storage destruction
@@ -491,13 +531,32 @@ function industry.eventHandler:onEvent(event)
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
                         industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
+
+                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 10)
                     end
 
+                    -- handle laboratory destruction
                     if (string.match(_name,'Laboratory.*')) then
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
                         trigger.action.outText(string.format("Laboratory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+
+                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
+                    end
+
+                    -- handle HQ destruction
+                    if (string.match(_name,'HQ.*')) then
+                        local _pos = event.initiator:getPosition().p
+                        trigger.action.effectSmokeBig(_pos, 3, 0.5)
+                        trigger.action.setUserFlag(_name .. '_destroyed', true)
+                        trigger.action.outText(string.format("HQ of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+
+                        if (industry.getCoalitionByGroupname(_groupname) == 'red') then
+                            industry.reduceTickets('red', math.floor(industry.tickets.red / 2))
+                        else
+                            industry.reduceTickets('blue', math.floor(industry.tickets.blue / 2))
+                        end
                     end
                 end
 
@@ -508,6 +567,8 @@ function industry.eventHandler:onEvent(event)
                         trigger.action.effectSmokeBig(_pos, 1, 0.5)
                         env.info(string.format("Spawn smoke effect at unit location %s", _name))
                     end
+
+                    industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
                 end
             end
 
@@ -537,6 +598,9 @@ function industry.scheduleHandlers()
 
     mist.scheduleFunction(industry.checkDeadGroups,{} , timer.getTime() + 304, industry.config.checkDeadGroupsTime)    
     env.info(string.format('Industry checkDeadGroups initialized (%d seconds)', industry.config.checkDeadGroupsTime))
+
+    industry.tickets.red = industry.config.tickets
+    industry.tickets.blue = industry.config.tickets
 end
 
 industry.addRadioMenu()
