@@ -251,7 +251,7 @@ function industry.winMission(winner)
         else
             trigger.action.setUserFlag('missionWinBlue', true)
         end
-        net.missionlist_set_loop(true)
+        -- net.missionlist_set_loop(true)
         net.load_next_mission()
     end
 end
@@ -361,8 +361,9 @@ function industry.productionLoop()
     industry.labs.blue = _countBlueLabs
     industry.addRessources("blue", _addRessourcesBlue + _labsBonusBlue)
 
-    industry.reduceTickets("blue", 1)
-    industry.reduceTickets("red", 1)
+    -- Reduce tickets after production loop 1 for every minute
+    industry.reduceTickets("blue", math.ceil(industry.config.productionLoopTime / 60))
+    industry.reduceTickets("red", math.ceil(industry.config.productionLoopTime / 60))
 
     trigger.action.outText(string.format("New Ressources produced\n"..
         "BLUE %d tons + %d labs-bonus   RED %d tons + %d labs-bonus", _addRessourcesBlue, _labsBonusBlue, _addRessourcesRed, _labsBonusRed), 10)
@@ -568,6 +569,12 @@ function industry.eventHandler:onEvent(event)
                         env.info(string.format("Spawn smoke effect at unit location %s", _name))
                     end
 
+                    -- industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
+                end
+
+                -- player plane destruction reduces tickets
+                if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category ~= 'vehicle' and mist.getGroupData(_groupname).category ~= 'static' and event.initiator:getPlayerName() ~= nil) then
+                    env.info(string.format("Player %s (%s) killed. Reduce tickets of %s", event.initiator:getPlayerName(), _name, industry.getCoalitionByGroupname(_groupname)))
                     industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
                 end
             end
