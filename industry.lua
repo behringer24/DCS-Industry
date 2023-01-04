@@ -4,6 +4,7 @@ if (industry ~= nil) then return 0 end
 industry = {}
 
 industry.config = {
+    startRessources = 200,
     factoryProduction = 30,
     storageCapacity = 1000,
     labsboost = 20,
@@ -228,17 +229,27 @@ function industry.winMission(winner)
 
         if (industry.winner == coalition.side.RED) then
             industry.loser = coalition.side.BLUE
-        else
-            industry.loser = coalition.side.RED
+        else if (industry.winner == coalition.side.BLUE) then
+                industry.loser = coalition.side.RED
+            else
+                industry.loser = coalition.side.NEUTRAL
+            end
         end
 
         industry.winCountdown = industry.config.winCountdownLength
+
+        -- self schedule every second
+        mist.scheduleFunction(industry.winMission,{industry.winner} , timer.getTime() + 1, 1)
     end
 
     if (industry.winCountdown > 10) then
         if (industry.winCountdown % 60 == 0) then
-            trigger.action.outTextForCoalition(industry.winner, string.format("MISSION ACCOMPLISHED. RTB. Mission ends in %d minutes", industry.winCountdown / 60), 10)
-            trigger.action.outTextForCoalition(industry.loser,  string.format("MISSION FAILED. RTB. Mission ends in %d minutes", industry.winCountdown / 60), 10)
+            if (industry.winner == coalition.side.NEUTRAL) then
+                trigger.action.outText(string.format("MISSION DRAW. No winner. RTB. Mission ends in %d minutes", industry.winCountdown / 60), 10)
+            else
+                trigger.action.outTextForCoalition(industry.winner, string.format("MISSION ACCOMPLISHED. RTB. Mission ends in %d minutes", industry.winCountdown / 60), 10)
+                trigger.action.outTextForCoalition(industry.loser,  string.format("MISSION FAILED. RTB. Mission ends in %d minutes", industry.winCountdown / 60), 10)
+            end
         end
     else
         trigger.action.outText(string.format("Mission ends in %d seconds", industry.winCountdown), 3)
@@ -249,8 +260,11 @@ function industry.winMission(winner)
     if (industry.winCountdown < 0) then
         if (industry.winner == coalition.side.RED) then
             trigger.action.setUserFlag('missionWinRed', true)
-        else
-            trigger.action.setUserFlag('missionWinBlue', true)
+        else if (industry.winner == coalition.side.RED) then
+                trigger.action.setUserFlag('missionWinBlue', true)
+            else
+                trigger.action.setUserFlag('missionWinNeutral', true)
+            end
         end
         -- net.missionlist_set_loop(true)
         net.load_next_mission()
@@ -266,7 +280,7 @@ function industry.destroyStorage(coa)
         industry.storages.red = industry.storages.red - 1
 
         if (industry.storages.red == 0) then
-            mist.scheduleFunction(industry.winMission,{coalition.side.BLUE} , timer.getTime() + 1, 1)
+            industry.winMission(coalition.side.BLUE)
             trigger.action.outText(string.format("All RED storages have been destroyed", industry.ressources.red), 10)
         else
             trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 10)   
@@ -278,7 +292,7 @@ function industry.destroyStorage(coa)
         industry.storages.blue = industry.storages.blue - 1
 
         if (industry.storages.blue == 0) then
-            mist.scheduleFunction(industry.winMission,{coalition.side.RED} , timer.getTime() + 1, 1)
+            industry.winMission(coalition.side.RED)
             trigger.action.outText(string.format("All BLUE storages have been destroyed", industry.ressources.red), 10)
         else
             trigger.action.outText(string.format("A BLUE storage has been destroyed. %d tons ressources left", industry.ressources.blue), 10)  
@@ -361,10 +375,6 @@ function industry.productionLoop()
     industry.storages.blue = _countBlueStorages
     industry.labs.blue = _countBlueLabs
     industry.addRessources("blue", _addRessourcesBlue + _labsBonusBlue)
-
-    -- Reduce tickets after production loop 1 for every minute
-    industry.reduceTickets("blue", math.ceil(industry.config.productionLoopTime / 60))
-    industry.reduceTickets("red", math.ceil(industry.config.productionLoopTime / 60))
 
     trigger.action.outText(string.format("New Ressources produced\n"..
         "BLUE %d tons + %d labs-bonus   RED %d tons + %d labs-bonus", _addRessourcesBlue, _labsBonusBlue, _addRessourcesRed, _labsBonusRed), 10)
@@ -462,21 +472,41 @@ function industry.addRadioMenu()
     end
 end
 
+function industry.evaluateTicketWinner()
+    if (industry.tickets.red <= 0 or industry.tickets.blue <= 0) then
+        if (industry.tickets.red > industry.tickets.blue) then
+            industry.winMission(coalition.side.RED)
+        else if (industry.tickets.blue > industry.tickets.red) then
+                industry.winMission(coalition.side.BLUE)
+            else
+                industry.winMission(coalition.side.NEUTRAL)
+            end
+        end
+    end
+end
+
 function industry.reduceTickets(coal, tickets)
     if (industry.winner == nil) then
         if (coal == "red") then
             industry.tickets.red = industry.tickets.red - tickets
-            if (industry.tickets.red < 0) then
-                industry.tickets.red = 0
-                mist.scheduleFunction(industry.winMission,{coalition.side.BLUE} , timer.getTime() + 1, 1)
-            end
+            trigger.action.outText(string.format("Tickets: RED %d (-%d)", industry.tickets.red, tickets), 10)
         else
             industry.tickets.blue = industry.tickets.blue - tickets
-            if (industry.tickets.blue <= 0) then
-                industry.tickets.blue = 0
-                mist.scheduleFunction(industry.winMission,{coalition.side.RED} , timer.getTime() + 1, 1)
-            end
+            trigger.action.outText(string.format("Tickets: BLUE %d (-%d)", industry.tickets.blue, tickets), 10)
         end
+
+        industry.evaluateTicketWinner()
+
+        trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
+    end
+end
+
+function industry.tickerTickets()
+    if (industry.winner == nil) then
+        industry.tickets.red = industry.tickets.red - 1
+        industry.tickets.blue = industry.tickets.blue - 1
+
+        industry.evaluateTicketWinner()
 
         trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
     end
@@ -607,6 +637,11 @@ function industry.scheduleHandlers()
     mist.scheduleFunction(industry.checkDeadGroups,{} , timer.getTime() + 304, industry.config.checkDeadGroupsTime)    
     env.info(string.format('Industry checkDeadGroups initialized (%d seconds)', industry.config.checkDeadGroupsTime))
 
+    mist.scheduleFunction(industry.tickerTickets,{} , timer.getTime() + 60, 60)    
+    env.info(string.format('Industry tickerTickets initialized (%d seconds)', 60))
+
+    industry.ressources.red = industry.config.startRessources
+    industry.ressources.blue = industry.config.startRessources
     industry.tickets.red = industry.config.tickets
     industry.tickets.blue = industry.config.tickets
 end
