@@ -202,6 +202,7 @@ function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
         -- not using Group.getUnits() due to DCS bug with some unit types        
         for i=1,_group:getSize() do
             local _unit = _group:getUnit(i)
+            env.info(string.format("Convoy %s arrived. Unit %d: %s", groupName, i, _unit:getTypeName()), false)
             if (string.match(_unit:getTypeName(), truckTypeName) and _unit:getLife() > 1) then
                 _addRessources = _addRessources + tonsEach
             end
