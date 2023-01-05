@@ -113,6 +113,7 @@ I set this into a "Do script" command in the same trigger where I load the MIST 
 Industry supports the following configurations (with its default values).
 
 ``` lua
+industry.config.startRessources = 200
 industry.config.factoryProduction = 30
 industry.config.storageCapacity = 1000
 industry.config.productionLoopTime = 300
@@ -120,7 +121,12 @@ industry.config.respawnLoopTime = 60
 industry.config.labsboost = 10
 industry.config.checkDeadGroupsTime = 300
 industry.config.respawnRetriesOnQueue = 2
+industry.config.winCountdownLength = 600
+industry.config.tickets = 100
 ```
+
+#### industry.config.startRessources
+how many tons of ressources does each coalition have right from the start of the mission. Has direct consequences how the mission continues after the first wave of spawned ai units have clashed.
 
 #### industry.config.factoryProduction
 How many ressources one factory produces each round/loop run. This is later increased by laboratories. This value is increased by 1 for all factories together (to avoid only 10th of increasement and add some variation to the numbers)
@@ -143,7 +149,33 @@ This is more of a technical feature and usually does not need to be changed. Thi
 #### industry.config.respawnRetriesOnQueue
 This is more of a technical feature and usually does not need to be changed. If a group cannot respawn, because one unit is not (finally) dead like a plane shot down but not already crashed. The respawn is retried and this is the maximum amount of retries.
 
+#### industry.config.winCountdownLength
+How many seconds does the RTB countdown take after one side has one (or mission is draw). Should be a multiple of 60 sec (one minute). Only the last seconds are count down and displayed. Until then every full minute is shown.
+
+#### industry.config.tickets
+With how many tickets does each side start. Tickets are reduced by one every minute. Tickets are reduced by one with each human player death and by destructions of labs, factories and storages (the infrastructure as primary mission goals).
+
 ## How it works
+### Tickets
+There are two different types of ressources in Industry. The first one are *tons of production ressources* usually only called *ressources* and there are *tickets*. Tickets are limiting the time for one mission, so you server resets after a maximum number of minutes (measured in tickets). They are the main unit to focus on for winning the mission.
+
+Tickets are reduced for both sides by one every minute. So if you set the *industry.config.tickets' config value to 120 the maximum time for the mission is 2 hours (120 minutes).
+
+Each time a human pilot/player is killed (his plane, so ejecting does not help) the number of tickets for his coalition is reduced by one.
+
+Each time a storage, lab or factory is destroyed the amount of tickets is reduced too.
+
+If a HQ is destroyed the remaining tickets are reduced by half of the remaining tickets. So if 48 tickets where left, the tickets are reduced to 24, for example.
+
+Focussing on the mission goals (destroying strategic targets like HQs, labs, factories and storages) and shooting down players makes your side winning.
+
+### Ressources
+Ressources are produced by factories, delivered by air-transport or convoys. The mission designer could also set up trains. This totally depends on the mision design.
+
+Factory production is increased per lab by a configured percentage amount.
+
+Ressources are needed to respawn (AI) units that are queued for respawning.
+
 ### Queues
 Industry uses four respawn queues. One for "free" (0 tons of ressources) respawns and one for respawns that cost more than 0 tons of ressources. And these two queues for red and blue side each.
 

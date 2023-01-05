@@ -472,6 +472,10 @@ function industry.addRadioMenu()
     end
 end
 
+---------------------------------------------------------
+-- Evaluate if one party won by tickets
+-- Called internally only
+---------------------------------------------------------
 function industry.evaluateTicketWinner()
     if (industry.tickets.red <= 0 or industry.tickets.blue <= 0) then
         if (industry.tickets.red > industry.tickets.blue) then
@@ -485,13 +489,22 @@ function industry.evaluateTicketWinner()
     end
 end
 
+---------------------------------------------------------
+-- Reduce tickets of one coalition
+---------------------------------------------------------
 function industry.reduceTickets(coal, tickets)
     if (industry.winner == nil) then
         if (coal == "red") then
             industry.tickets.red = industry.tickets.red - tickets
+            if (industry.tickets.red < 0) then
+                industry.tickets.red = 0
+            end
             trigger.action.outText(string.format("Tickets: RED %d (-%d)", industry.tickets.red, tickets), 10)
         else
             industry.tickets.blue = industry.tickets.blue - tickets
+            if (industry.tickets.blue < 0) then
+                industry.tickets.blue = 0
+            end
             trigger.action.outText(string.format("Tickets: BLUE %d (-%d)", industry.tickets.blue, tickets), 10)
         end
 
@@ -501,6 +514,9 @@ function industry.reduceTickets(coal, tickets)
     end
 end
 
+---------------------------------------------------------
+-- Scheduled function to countdown tickets every minute
+---------------------------------------------------------
 function industry.tickerTickets()
     if (industry.winner == nil) then
         industry.tickets.red = industry.tickets.red - 1
@@ -646,6 +662,9 @@ function industry.scheduleHandlers()
     industry.tickets.blue = industry.config.tickets
 end
 
+---------------------------------------------------------
+-- Init Industry script
+---------------------------------------------------------
 industry.addRadioMenu()
 mist.scheduleFunction(industry.scheduleHandlers,{} , timer.getTime() + 5)
 env.info('Industry ' .. industry.version .. ' initialized')
