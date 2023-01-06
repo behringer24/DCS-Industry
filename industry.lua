@@ -277,10 +277,11 @@ end
 function industry.destroyStorage(coa)
     if (string.match(coa, "red") and industry.storages.red > 0) then
         industry.ressources.red = industry.ressources.red - math.floor(industry.ressources.red / industry.storages.red)
+        industry.reduceTickets("red", math.ceil(industry.tickets.red / industry.storages.red))
         industry.storages.red = industry.storages.red - 1
 
         if (industry.storages.red == 0) then
-            industry.winMission(coalition.side.BLUE)
+            -- industry.winMission(coalition.side.BLUE)
             trigger.action.outText(string.format("All RED storages have been destroyed", industry.ressources.red), 10)
         else
             trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 10)   
@@ -289,10 +290,11 @@ function industry.destroyStorage(coa)
 
     if (string.match(coa, "blue") and industry.storages.blue > 0) then
         industry.ressources.blue = industry.ressources.blue - math.floor(industry.ressources.blue / industry.storages.blue)
+        industry.reduceTickets("blue", math.ceil(industry.tickets.blue / industry.storages.blue))
         industry.storages.blue = industry.storages.blue - 1
 
         if (industry.storages.blue == 0) then
-            industry.winMission(coalition.side.RED)
+            -- industry.winMission(coalition.side.RED)
             trigger.action.outText(string.format("All BLUE storages have been destroyed", industry.ressources.red), 10)
         else
             trigger.action.outText(string.format("A BLUE storage has been destroyed. %d tons ressources left", industry.ressources.blue), 10)  
@@ -437,6 +439,7 @@ end
 function industry.checkDeadGroups()
     for _groupname, _cost in pairs(industry.respawnGroup) do
         if (mist.groupIsDead(_groupname)) then
+            env.info(string.format("Check group:%s", _groupname), false)
             env.info(string.format("Found unhandled dead group:%s coalition:%s cost:%d, try to requeue", _groupname, industry.getCoalitionByGroupname(_groupname), _cost), false)
             industry.queueRespawn(_groupname, _cost)
         end
@@ -579,8 +582,6 @@ function industry.eventHandler:onEvent(event)
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
                         industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
-
-                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 10)
                     end
 
                     -- handle laboratory destruction
