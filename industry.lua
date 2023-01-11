@@ -35,7 +35,9 @@ industry.coalitionNameToId = {
 }
 
 industry.coalitionIdToName = {
-    "neutral", "red", "blue"
+    [0] = "neutral",
+    [1] = "red",
+    [2] = "blue"
 }
 
 ---------------------------------------------------------
