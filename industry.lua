@@ -16,18 +16,27 @@ industry.config = {
     tickets = 100,
 }
 
-industry.version = "v0.9.0"
-industry.ressources = {red = 200, blue = 200}
-industry.factories = {red= 1, blue = 1}
-industry.storages = {red= 1, blue = 1}
-industry.labs = {red = 0, blue = 0}
-industry.hq = {red = 1, blue = 1}
-industry.tickets = {red = 100, blue = 100}
+industry.version = "v0.10.0"
+industry.ressources = {[coalition.side.RED] = 200, [coalition.side.BLUE] = 200}
+industry.factories = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
+industry.storages = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
+industry.labs = {[coalition.side.RED] = 0, [coalition.side.BLUE] = 0}
+industry.hq = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
+industry.tickets = {[coalition.side.RED] = 100, [coalition.side.BLUE] = 100}
 industry.respawnGroup = {}
-industry.respawnTriesBlue = 0
-industry.respawnTriesRed = 0
+industry.respawnTries = {[coalition.side.RED] = 0, [coalition.side.BLUE] = 0}
 industry.winner = nil
 industry.winCountdown = 600
+
+industry.coalitionNameToId = {
+    ["neutral"] = 0,
+    ["red"] = 1,
+    ["blue"] = 2
+}
+
+industry.coalitionIdToName = {
+    "neutral", "red", "blue"
+}
 
 ---------------------------------------------------------
 -- Queue implementation
@@ -67,10 +76,8 @@ industry.Queue = function()
     return queue
 end
 
-industry.respawnQueueRed = industry.Queue()
-industry.respawnQueueBlue = industry.Queue()
-industry.respawnQueueRedFree = industry.Queue()
-industry.respawnQueueBlueFree = industry.Queue()
+industry.respawnQueue = {[coalition.side.RED] = industry.Queue(), [coalition.side.BLUE] = industry.Queue()}
+industry.respawnQueueFree = {[coalition.side.RED] = industry.Queue(), [coalition.side.BLUE] = industry.Queue()}
 
 ---------------------------------------------------------
 -- Get group name of unit
@@ -90,7 +97,7 @@ end
 ---------------------------------------------------------
 function industry.getCoalitionByGroupname(groupname)
     if (mist.DBs.groupsByName[groupname]) then
-        return mist.DBs.groupsByName[groupname].coalition
+        return industry.coalitionNameToId[mist.DBs.groupsByName[groupname].coalition]
     else
         return nil
     end
@@ -109,20 +116,12 @@ end
 -- If costs = 0 then the unit is added to the free respawn
 ---------------------------------------------------------
 function industry.queueRespawn(gpName, costs)
-    local groupdata = mist.getGroupData(gpName)
+    local coal = industry.getCoalitionByGroupname(gpName)
 
     if (costs == 0) then
-        if (groupdata.coalition == "red") then
-            industry.respawnQueueRedFree.push({name = gpName, cost = 0})
-        else
-            industry.respawnQueueBlueFree.push({name = gpName, cost = 0})
-        end
+        industry.respawnQueueFree[coal].push({name = gpName, cost = 0})
     else
-        if (groupdata.coalition == "red") then
-            industry.respawnQueueRed.push({name = gpName, cost = costs})
-        else
-            industry.respawnQueueBlue.push({name = gpName, cost = costs})
-        end
+        industry.respawnQueue[coal].push({name = gpName, cost = costs})
     end
 end
 
@@ -131,31 +130,19 @@ end
 -- returns true on success
 ---------------------------------------------------------
 function industry.respawn(gpName, costs)
-    local groupdata = mist.getGroupData(gpName)
+    local coal = industry.getCoalitionByGroupname(gpName)
 
-    if (groupdata.coalition == "red") then
-        if industry.ressources.red >= costs then
-            industry.ressources.red = industry.ressources.red - costs
-            mist.respawnGroup(gpName, true)
-            if (costs > 0) then
-                trigger.action.outText(string.format("Respawned red group %s for %d tons of ressources", gpName, costs), 10)
-            else
-                trigger.action.outText(string.format("Respawned red group %s", gpName), 10)
-            end
-            return true
+    if industry.ressources[coal] >= costs then
+        industry.ressources[coal] = industry.ressources[coal] - costs
+        mist.respawnGroup(gpName, true)
+        if (costs > 0) then
+            trigger.action.outText(string.format("Respawned %s group %s for %d tons of ressources", industry.coalitionIdToName[coal], gpName, costs), 10)
+        else
+            trigger.action.outText(string.format("Respawned %s group %s", industry.coalitionIdToName[coal], gpName), 10)
         end
-    else
-        if industry.ressources.blue >= costs then
-            industry.ressources.blue = industry.ressources.blue - costs
-            mist.respawnGroup(gpName, true)
-            if (costs > 0) then
-                trigger.action.outText(string.format("Respawned blue group %s for %d tons of ressources", gpName, costs), 10)
-            else
-                trigger.action.outText(string.format("Respawned blue group %s", gpName), 10)
-            end
-            return true
-        end
+        return true
     end
+    
     return false
 end
 
@@ -164,9 +151,9 @@ end
 -- Used e.g. from landing trigger in mission editor when
 -- air units reach destination
 ---------------------------------------------------------
-function industry.addRessourcesTransport(coalition, tons)
-    trigger.action.outText(string.format("A %s transport with %d tons of ressources arrived at its destination", coalition, tons), 5)
-    industry.addRessources(coalition, tons)
+function industry.addRessourcesTransport(coal, tons)
+    trigger.action.outText(string.format("A %s transport with %d tons of ressources arrived at its destination", industry.coalitionIdToName[coal], tons), 5)
+    industry.addRessources(coal, tons)
 end
 
 ---------------------------------------------------------
@@ -174,19 +161,11 @@ end
 -- Central function to add ressources
 -- Limits ressources to storage space
 ---------------------------------------------------------
-function industry.addRessources(coalition, tons)
-    if (string.match(coalition, "red")) then
-        industry.ressources.red = industry.ressources.red + tons
-        if (industry.ressources.red > industry.storages.red * industry.config.storageCapacity) then
-            industry.ressources.red = industry.storages.red * industry.config.storageCapacity
-            trigger.action.outText("RED storages are full", 3)
-        end
-    else
-        industry.ressources.blue = industry.ressources.blue + tons
-        if (industry.ressources.blue > industry.storages.blue * industry.config.storageCapacity) then
-            industry.ressources.blue = industry.storages.blue * industry.config.storageCapacity
-            trigger.action.outText("BLUE storages are full", 3)
-        end
+function industry.addRessources(coal, tons)
+    industry.ressources[coal] = industry.ressources[coal] + tons
+    if (industry.ressources[coal] > industry.storages[coal] * industry.config.storageCapacity) then
+        industry.ressources[coal] = industry.storages[coal] * industry.config.storageCapacity
+        trigger.action.outText(string.format("Storages of %s are full", industry.coalitionIdToName[coal]), 3)
     end
 end
 
@@ -209,13 +188,8 @@ function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
             end
         end
 
-        if (_group:getCoalition() == 1) then
-            trigger.action.outText(string.format("A RED convoy with %d tons of ressources arrived at its destination", _addRessources), 5)
-            industry.addRessources("red", _addRessources)
-        else            
-            trigger.action.outText(string.format("A BLUE convoy with %d tons of ressources arrived at its destination", _addRessources), 5)
-            industry.addRessources("blue", _addRessources)
-        end
+        trigger.action.outText(string.format("A %s convoy with %d tons of ressources arrived at its destination", industry.coalitionIdToName[_group:getCoalition()], _addRessources), 5)
+        industry.addRessources(_group:getCoalition(), _addRessources)
     end
 end
 
@@ -274,31 +248,17 @@ end
 ---------------------------------------------------------
 -- Destroy storage space and remove ressources
 ---------------------------------------------------------
-function industry.destroyStorage(coa)
-    if (string.match(coa, "red") and industry.storages.red > 0) then
-        industry.ressources.red = industry.ressources.red - math.floor(industry.ressources.red / industry.storages.red)
-        industry.reduceTickets("red", math.ceil(industry.tickets.red / industry.storages.red))
-        industry.storages.red = industry.storages.red - 1
+function industry.destroyStorage(coal)
+    if (industry.storages[coal] > 0) then
+        industry.ressources[coal] = industry.ressources[coal] - math.floor(industry.ressources[coal] / industry.storages[coal])
+        industry.reduceTickets(coal, math.ceil(industry.tickets[coal] / industry.storages[coal]))
+        industry.storages[coal] = industry.storages[coal] - 1
 
-        if (industry.storages.red == 0) then
-            -- industry.winMission(coalition.side.BLUE)
-            trigger.action.outText(string.format("All RED storages have been destroyed", industry.ressources.red), 10)
+        if (industry.storages[coal] == 0) then
+            trigger.action.outText(string.format("All %s storages have been destroyed", industry.coalitionIdToName[coal], industry.ressources[coal]), 10)
         else
-            trigger.action.outText(string.format("A RED storage has been destroyed. %d tons ressources left", industry.ressources.red), 10)   
+            trigger.action.outText(string.format("A %sstorage has been destroyed. %d tons ressources left", industry.coalitionIdToName[coal], industry.ressources[coal]), 10)   
         end
-    end
-
-    if (string.match(coa, "blue") and industry.storages.blue > 0) then
-        industry.ressources.blue = industry.ressources.blue - math.floor(industry.ressources.blue / industry.storages.blue)
-        industry.reduceTickets("blue", math.ceil(industry.tickets.blue / industry.storages.blue))
-        industry.storages.blue = industry.storages.blue - 1
-
-        if (industry.storages.blue == 0) then
-            -- industry.winMission(coalition.side.RED)
-            trigger.action.outText(string.format("All BLUE storages have been destroyed", industry.ressources.red), 10)
-        else
-            trigger.action.outText(string.format("A BLUE storage has been destroyed. %d tons ressources left", industry.ressources.blue), 10)  
-        end 
     end
 end
 
@@ -318,69 +278,42 @@ end
 function industry.productionLoop()
     trigger.action.outText("Industry ressources arrived", 5)
 
-    local _redObjects = coalition.getStaticObjects(1)
-    local _countRedFactories = 0
-    local _countRedStorages = 0
-    local _countRedLabs = 0
-    local _addRessourcesRed = 1
-    local _labsBonusRed = 0
-    for k, v in pairs(_redObjects) do
-        local _name = v:getName()
-        local _type = v:getTypeName()
-        local _health = v:getLife()
+    for coal=1, 2 do
+        local _Objects = coalition.getStaticObjects(coal)
+        local _countFactories = 0
+        local _countStorages = 0
+        local _countLabs = 0
+        local _addRessources= 1
+        local _labsBonus = 0
 
-        if (string.match(_name, "Laboratory.*") and _health > 1) then
-            _countRedLabs = _countRedLabs + 1
-		end
+        for k, v in pairs(_Objects) do
+            local _name = v:getName()
+            local _type = v:getTypeName()
+            local _health = v:getLife()
 
-        if (string.match(_name, "Factory.*") and _health > 1) then
-            _addRessourcesRed = _addRessourcesRed + industry.config.factoryProduction
-            _countRedFactories = _countRedFactories + 1;   
-		end
+            if (string.match(_name, "Laboratory.*") and _health > 1) then
+                _countLabs = _countLabs + 1
+            end
 
-        if (string.match(_name, "Storage.*") and _health > 1) then            
-            _countRedStorages = _countRedStorages + 1;   
-		end
+            if (string.match(_name, "Factory.*") and _health > 1) then
+                _addRessources = _addRessources + industry.config.factoryProduction
+                _countFactories = _countFactories + 1;   
+            end
+
+            if (string.match(_name, "Storage.*") and _health > 1) then            
+                _countStorages = _countStorages + 1;   
+            end
+        end
+
+        _labsBonus = _addRessources * (industry.config.labsboost / 100) * _countLabs
+        industry.factories[coal] = _countFactories
+        industry.storages[coal] = _countStorages
+        industry.labs[coal] = _countLabs
+        industry.addRessources(coal, _addRessources + _labsBonus)
+
+        trigger.action.outText(string.format("New Ressources produced %s "..
+            "%d tons + %d labs-bonus", industry.coalitionIdToName[coal], _addRessources, _labsBonus), 10)
     end
-    _labsBonusRed = _addRessourcesRed * (industry.config.labsboost / 100) * _countRedLabs
-    industry.factories.red = _countRedFactories
-    industry.storages.red = _countRedStorages
-    industry.labs.red = _countRedLabs
-    industry.addRessources("red", _addRessourcesRed + _labsBonusRed)
-
-    local _blueObjects = coalition.getStaticObjects(2)
-    local _countBlueFactories = 0
-    local _countBlueStorages = 0
-    local _countBlueLabs = 0
-    local _addRessourcesBlue = 1
-    local _labsBonusBlue = 0
-    for k, v in pairs(_blueObjects) do
-        local _name = v:getName()
-        local _type = v:getTypeName()
-        local _health = v:getLife()
-
-        if (string.match(_name, "Laboratory.*") and _health > 1) then
-            _countBlueLabs = _countBlueLabs + 1
-		end
-
-        if (string.match(_name, "Factory.*") and _health > 1) then
-            _addRessourcesBlue = _addRessourcesBlue + industry.config.factoryProduction 
-            _countBlueFactories = _countBlueFactories + 1
-		end
-
-        if (string.match(_name, "Storage.*") and _health > 1) then            
-            _countBlueStorages = _countBlueStorages + 1;   
-		end
-    end
-    _labsBonusBlue = _addRessourcesBlue * (industry.config.labsboost / 100) * _countBlueLabs
-    industry.factories.blue = _countBlueFactories
-    industry.storages.blue = _countBlueStorages
-    industry.labs.blue = _countBlueLabs
-    industry.addRessources("blue", _addRessourcesBlue + _labsBonusBlue)
-
-    trigger.action.outText(string.format("New Ressources produced\n"..
-        "BLUE %d tons + %d labs-bonus   RED %d tons + %d labs-bonus", _addRessourcesBlue, _labsBonusBlue, _addRessourcesRed, _labsBonusRed), 10)
-    trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
 end
 
 ---------------------------------------------------------
@@ -389,47 +322,21 @@ end
 -- only one unit per queue spawns until next scheduled run
 ---------------------------------------------------------
 function industry.respawnLoop()
-    local _blueGroup = industry.respawnQueueBlue.get()
-    if (_blueGroup) then
-        if (mist.groupIsDead(_blueGroup.name) or industry.respawnTriesBlue > industry.config.respawnRetriesOnQueue - 1) then
-            if (industry.respawn(_blueGroup.name, _blueGroup.cost)) then
-                industry.respawnQueueBlue.pop()
-                industry.respawnTriesBlue = 0
-                trigger.action.setUserFlag(_blueGroup.name .. '_respawn', true)                
+    for coal = 1, 2 do
+        local _group = industry.respawnQueue[coal].get()
+        if (_group) then
+            if (mist.groupIsDead(_group.name) or industry.respawnTries[coal] > industry.config.respawnRetriesOnQueue - 1) then
+                if (industry.respawn(_group.name, _group.cost)) then
+                    industry.respawnQueue[coal].pop()
+                    industry.respawnTries[coal] = 0
+                    trigger.action.setUserFlag(_group.name .. '_respawn', true)                
+                end
+            else
+                env.info(string.format("Group %s not dead for respawning. Retry no. %d", _group.name, industry.respawnTries[coal]), false)
+                industry.respawnTries[coal] = industry.respawnTries[coal] + 1
             end
-        else
-            env.info(string.format("Group %s not dead for respawning. Retry no. %d", _blueGroup.name, industry.respawnTriesBlue), false)
-            industry.respawnTriesBlue = industry.respawnTriesBlue + 1
         end
     end
-
-    local _blueGroupFree = industry.respawnQueueBlueFree.pop()
-    if (_blueGroupFree) then
-        industry.respawn(_blueGroupFree.name, 0)
-        trigger.action.setUserFlag(_blueGroupFree.name .. '_respawn', true)
-    end
-    
-    local _redGroup = industry.respawnQueueRed.get()
-    if (_redGroup) then
-        if (mist.groupIsDead(_redGroup.name) or industry.respawnTriesRed > industry.config.respawnRetriesOnQueue - 1) then
-            if (industry.respawn(_redGroup.name, _redGroup.cost)) then
-                industry.respawnQueueRed.pop()
-                industry.respawnTriesRed = 0
-                trigger.action.setUserFlag(_redGroup.name .. '_respawn', true)
-            end
-        else
-            env.info(string.format("Group %s not dead for respawning. Retry no. %d", _redGroup.name, industry.respawnTriesRed), false)
-            industry.respawnTriesRed = industry.respawnTriesRed + 1
-        end
-    end
-
-    local _redGroupFree = industry.respawnQueueRedFree.pop()
-    if (_redGroupFree) then
-        industry.respawn(_redGroupFree.name, 0)
-        trigger.action.setUserFlag(_redGroupFree.name .. '_respawn', true)
-    end
-    
-    -- trigger.action.outText(string.format("BLUE (%d/%d/%d): %d tons    RED (%d/%d/%d): %d tons", industry.factories.blue, industry.storages.blue, industry.labs.blue, industry.ressources.blue, industry.factories.red, industry.storages.red, industry.labs.red, industry.ressources.red), 10)
 end
 
 ---------------------------------------------------------
@@ -453,10 +360,10 @@ function industry.radioStatistics(groupId)
     trigger.action.outTextForGroup(groupId, string.format(
         "BLUE Fact: %2d   Labs: %2d    Stor: %2d    Ress: %4d\n"..
         "RED   Fact: %2d   Labs: %2d    Stor: %2d    Ress: %4d",
-            industry.factories.blue, industry.labs.blue, industry.storages.blue, industry.ressources.blue,
-            industry.factories.red,  industry.labs.red,  industry.storages.red,  industry.ressources.red
+            industry.factories[2], industry.labs[2], industry.storages[2], industry.ressources[2],
+            industry.factories[1], industry.labs[1], industry.storages[1], industry.ressources[1]
         ), 20)
-    trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
+    trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets[coalition.side.BLUE], industry.tickets[coalition.side.RED]), 20)
 end
 
 ---------------------------------------------------------
@@ -480,10 +387,10 @@ end
 -- Called internally only
 ---------------------------------------------------------
 function industry.evaluateTicketWinner()
-    if (industry.tickets.red <= 0 or industry.tickets.blue <= 0) then
-        if (industry.tickets.red > industry.tickets.blue) then
+    if (industry.tickets[coalition.side.RED] <= 0 or industry.tickets[coalition.side.BLUE] <= 0) then
+        if (industry.tickets[coalition.side.RED] > industry.tickets[coalition.side.BLUE]) then
             industry.winMission(coalition.side.RED)
-        else if (industry.tickets.blue > industry.tickets.red) then
+        else if (industry.tickets[coalition.side.BLUE] > industry.tickets[coalition.side.RED]) then
                 industry.winMission(coalition.side.BLUE)
             else
                 industry.winMission(coalition.side.NEUTRAL)
@@ -497,23 +404,15 @@ end
 ---------------------------------------------------------
 function industry.reduceTickets(coal, tickets)
     if (industry.winner == nil) then
-        if (coal == "red") then
-            industry.tickets.red = industry.tickets.red - tickets
-            if (industry.tickets.red < 0) then
-                industry.tickets.red = 0
-            end
-            trigger.action.outText(string.format("Tickets: RED %d (-%d)", industry.tickets.red, tickets), 10)
-        else
-            industry.tickets.blue = industry.tickets.blue - tickets
-            if (industry.tickets.blue < 0) then
-                industry.tickets.blue = 0
-            end
-            trigger.action.outText(string.format("Tickets: BLUE %d (-%d)", industry.tickets.blue, tickets), 10)
+        industry.tickets[coal] = industry.tickets[coal] - tickets
+        if (industry.tickets[coal] < 0) then
+            industry.tickets[coal] = 0
         end
+        trigger.action.outText(string.format("Tickets %s: %d (-%d)", industry.coalitionIdToName[coal], industry.tickets[coal], tickets), 10)
 
         industry.evaluateTicketWinner()
 
-        trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
+        trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets[coalition.side.BLUE], industry.tickets[coalition.side.RED]), 10)
     end
 end
 
@@ -522,12 +421,12 @@ end
 ---------------------------------------------------------
 function industry.tickerTickets()
     if (industry.winner == nil) then
-        industry.tickets.red = industry.tickets.red - 1
-        industry.tickets.blue = industry.tickets.blue - 1
+        industry.tickets[coalition.side.RED] = industry.tickets[coalition.side.RED] - 1
+        industry.tickets[coalition.side.BLUE] = industry.tickets[coalition.side.BLUE] - 1
 
         industry.evaluateTicketWinner()
 
-        trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets.blue, industry.tickets.red), 10)
+        trigger.action.outText(string.format("Tickets: BLUE %d    RED %d", industry.tickets[coalition.side.BLUE], industry.tickets[coalition.side.RED]), 10)
     end
 end
 
@@ -571,7 +470,7 @@ function industry.eventHandler:onEvent(event)
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.75)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
-                        trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+                        trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
                         industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 5)
                     end
@@ -589,7 +488,7 @@ function industry.eventHandler:onEvent(event)
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
-                        trigger.action.outText(string.format("Laboratory of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+                        trigger.action.outText(string.format("Laboratory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
                         industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
                     end
@@ -599,13 +498,9 @@ function industry.eventHandler:onEvent(event)
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
-                        trigger.action.outText(string.format("HQ of %s coalition destroyed", industry.getCoalitionByGroupname(_groupname)), 10)
+                        trigger.action.outText(string.format("HQ of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
-                        if (industry.getCoalitionByGroupname(_groupname) == 'red') then
-                            industry.reduceTickets('red', math.floor(industry.tickets.red / 2))
-                        else
-                            industry.reduceTickets('blue', math.floor(industry.tickets.blue / 2))
-                        end
+                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), math.floor(industry.tickets[industry.getCoalitionByGroupname(_groupname)] / 2))
                     end
                 end
 
@@ -616,8 +511,6 @@ function industry.eventHandler:onEvent(event)
                         trigger.action.effectSmokeBig(_pos, 1, 0.5)
                         env.info(string.format("Spawn smoke effect at unit location %s", _name))
                     end
-
-                    -- industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
                 end
 
                 -- player plane destruction reduces tickets
@@ -627,7 +520,7 @@ function industry.eventHandler:onEvent(event)
                 end
             end
 
-            -- if group has only this one dead unit left, queue for respawn
+            -- if group has only this one (now dead) unit left, queue for respawn
             local _group = Group.getByName(_groupname)
             if ((_group == nil or #_group:getUnits() < 2) and industry.respawnGroup[_groupname]) then
                 industry.queueRespawn(_groupname, industry.respawnGroup[_groupname])
@@ -657,10 +550,10 @@ function industry.scheduleHandlers()
     mist.scheduleFunction(industry.tickerTickets,{} , timer.getTime() + 60, 60)    
     env.info(string.format('Industry tickerTickets initialized (%d seconds)', 60))
 
-    industry.ressources.red = industry.config.startRessources
-    industry.ressources.blue = industry.config.startRessources
-    industry.tickets.red = industry.config.tickets
-    industry.tickets.blue = industry.config.tickets
+    industry.ressources[coalition.side.RED] = industry.config.startRessources
+    industry.ressources[coalition.side.BLUE] = industry.config.startRessources
+    industry.tickets[coalition.side.RED] = industry.config.tickets
+    industry.tickets[coalition.side.BLUE] = industry.config.tickets
 end
 
 ---------------------------------------------------------
