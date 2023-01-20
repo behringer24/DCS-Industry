@@ -16,7 +16,7 @@ industry.config = {
     tickets = 100,
 }
 
-industry.version = "v0.10.0"
+industry.version = "v0.10.1"
 industry.ressources = {[coalition.side.RED] = 200, [coalition.side.BLUE] = 200}
 industry.factories = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
 industry.storages = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
@@ -337,6 +337,12 @@ function industry.respawnLoop()
                 env.info(string.format("Group %s not dead for respawning. Retry no. %d", _group.name, industry.respawnTries[coal]), false)
                 industry.respawnTries[coal] = industry.respawnTries[coal] + 1
             end
+        end
+
+        local _groupFree = industry.respawnQueueFree[coal].pop()
+        if (_groupFree) then
+            industry.respawn(_groupFree.name, 0)
+            trigger.action.setUserFlag(_groupFree.name .. '_respawn', true)
         end
     end
 end
