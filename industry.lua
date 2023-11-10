@@ -478,6 +478,7 @@ function industry.eventHandler:onEvent(event)
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.75)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
+                        trigger.action.setUserFlag(string.format("%sFactoryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
                         trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
                         industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 5)
@@ -488,6 +489,7 @@ function industry.eventHandler:onEvent(event)
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
+                        trigger.action.setUserFlag(string.format("%sStorageDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
                         industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
                     end
 
@@ -496,6 +498,7 @@ function industry.eventHandler:onEvent(event)
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
+                        trigger.action.setUserFlag(string.format("%sLaboratoryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
                         trigger.action.outText(string.format("Laboratory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
                         industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
@@ -506,6 +509,7 @@ function industry.eventHandler:onEvent(event)
                         local _pos = event.initiator:getPosition().p
                         trigger.action.effectSmokeBig(_pos, 3, 0.5)
                         trigger.action.setUserFlag(_name .. '_destroyed', true)
+                        trigger.action.setUserFlag(string.format("%sHQDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
                         trigger.action.outText(string.format("HQ of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
                         industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), math.floor(industry.tickets[industry.getCoalitionByGroupname(_groupname)] / 2))

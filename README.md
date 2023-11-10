@@ -195,3 +195,66 @@ One of these cases that are not trivial in some cases are pilot ejects from unit
 
 ### Respawning convoys or transports
 Just an idea for your mission design: set the respawn costs for convoys and transports to 0, so these can still respawn if this coalition is very low on ressources. Or the coalition would not be able to recover - and nothing respawns. The mission could get stuck or leave them helpless even if the player does nothing.
+
+## Custom Flags
+Some events set custom flags to be used outside the script and directly in the mission editor of DCS
+
+### Destroyed objectives
+For each destroyed objective a custom flag is set to true.
+
+```
+[name of object]_destroyed
+```
+
+[name of object] is the full name you gave the object in the edit that has been destroyed. Can be caught with a trigger/once.
+
+Example:
+```
+StorageBlue-1_destroyed // if the object was named "StorageBlue-1"
+```
+
+Addidtionally a "class" type flag is set to true, too. For example these flags can be used to play custom sounds or add more events switched from the editor level.
+
+```
+[red/blue]FactoryDestroyed
+[red/blue]StorageDestroyed
+[red/blue]LaboratoryDestroyed
+[red/blue]HQDestroyed
+```
+
+Example:
+
+```
+blueStorageDestroyed // if it was a blue storage that got destroyed
+```
+
+In the class type triggers do not forget the flag back to false or 0 after it got handled in the editor so it can be handled multiple times (if needed).
+
+### Plane landed
+If a plane landed and shut down its engines a flag with the name
+
+```
+[name of unit]_landed
+```
+
+[name of unit] is the full name you gave the unit (not the group!) in the editor. This can be used to set up air transports in the editor or trigger other events.
+
+### Group respawned
+If a group is respawned by the industry script a custom flag is set to true
+
+```
+[name of group]_respawned
+```
+
+If you use this event do not forget to set it back to false, so the event can be re-triggered.
+
+### Side won
+If one side loses because their tickets are down to zero first a custom flag is set to true
+
+```
+missionWinRed
+missionWinBlue
+missionWinNeutral
+```
+
+If both sides have 0 tickets left the flag missionWinNeutral is set. You should use these events to handle the end of the mission in the editor.
