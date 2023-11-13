@@ -27,6 +27,7 @@ industry.respawnGroup = {}
 industry.respawnTries = {[coalition.side.RED] = 0, [coalition.side.BLUE] = 0}
 industry.winner = nil
 industry.winCountdown = 600
+industry.downedPilotCounter = 0
 
 industry.coalitionNameToId = {
     ["neutral"] = 0,
@@ -103,6 +104,83 @@ function industry.getCoalitionByGroupname(groupname)
     else
         return nil
     end
+end
+
+---------------------------------------------------------
+-- Get coalition of group by groupname
+-- Uses DCS directly so unit has to be alive
+---------------------------------------------------------
+function industry.getCoalitionByUnitname(unitname)
+    local _unit = Unit.getByName(unitname)
+    if (_unit) then
+        return _unit:getCoalition()
+    else
+        return nil
+    end
+end
+
+---------------------------------------------------------
+-- Clone group by name with new route
+-- Uses Mist
+---------------------------------------------------------
+function industry.cloneGroupNewRoute(gpName, route)
+    local vars = {}
+    vars.gpName = gpName
+    vars.action = 'clone'
+    vars.route = route
+    local newGroup = mist.teleportToPoint(vars)
+    return newGroup
+end
+
+function industry.cloneUnitToInfantry(oldunit, coal, country)    
+    local _pos = oldunit:getPoint()   
+    local _newtype = ''
+
+    if (coal == coalition.side.RED) then
+        _newtype = 'Infantry AK'      
+    else
+        _newtype = 'Soldier M4'
+    end
+
+    industry.downedPilotCounter = industry.downedPilotCounter + 1
+
+    local _groupname = string.format("DownedPilot-%d", industry.downedPilotCounter)
+
+    env.info(string.format("Cloning downed pilot to %s (%s), Country: %s", _groupname, _newtype, country), false)
+    
+    local _newsoldier = {
+        visible = true,
+        taskSelected = true,
+        route = {
+        }, -- end of ["route"]        
+        tasks = {
+        }, -- end of ["tasks"]
+        hidden = false,
+        units = {
+            [1] = {
+                type = _newtype,
+                transportable = 
+                {
+                    ["randomTransportable"] = false,
+                }, -- end of ["transportable"]                
+                skill = "Average",
+                y = _pos.z,
+                x = _pos.x + 1,
+                name = _groupname .. '-1',
+                playerCanDrive = true,
+                heading = 0.28605144170571,
+            }, -- end of [1]
+        }, -- end of ["units"]
+        y = _pos.z,
+        x = _pos.x + 1,
+        name = _groupname,
+        start_time = 0,
+        task = "Ground Nothing",
+    }
+
+    coalition.addGroup(country, Group.Category.GROUND, _newsoldier)
+    oldunit:destroy()
+    return _groupname
 end
 
 ---------------------------------------------------------
@@ -448,15 +526,111 @@ function industry.eventHandler:onEvent(event)
     -- events to handle
     if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or 
             event.id == world.event.S_EVENT_UNIT_LOST or
-            event.id == world.event.S_EVENT_EJECTION) then
+            event.id == world.event.S_EVENT_EJECTION or
+            event.id == world.event.S_EVENT_LANDING_AFTER_EJECTION) then
         local _name = event.initiator:getName()
         env.info(string.format("Handling event ID %d Unit %s", event.id, _name), false)
         local _groupname = industry.getGroupNameByUnitName(_name)
 
+        -- spawn SAR type heli mission if blueSAR or redSAR exists. has to have a waypoint 2 with the task landing as first task
+        if (event.id == world.event.S_EVENT_LANDING_AFTER_EJECTION) then
+            local _coalition = event.initiator:getCoalition()            
+            local _country = event.initiator:getCountry()
+            local _SARname = ''
+
+            -- sanitize weird results where coalition and country (99?) where off in some missions
+            if (_coalition == 0 or _country > 99) then
+                if (_name == "pilot_f15_parachute") then
+                    _coalition = 2
+                    _country = 2
+                else if (_name == "pilot_su27_parachute") then
+                        _coalition = 1
+                        _country = 0
+                    else
+                        env.info(string.format("ERROR unhandled type: %s country: %d coalition: %d", _name, _country, _coalition), false)
+                        _coalition = 1
+                        _country = 0
+                    end
+                end
+            end
+
+            if (_coalition == 2) then
+                _SARname = 'blueSAR'                                
+            else
+                _SARname = 'redSAR'
+            end          
+
+            local _path = mist.getGroupRoute(_SARname, true)
+            
+            if (_path) then                                
+                local _point = mist.utils.makeVec2(event.initiator:getPosition().p)
+                local _surface = land.getSurfaceType(_point)
+                if (_surface == land.SurfaceType.LAND or _surface == land.SurfaceType.ROAD or _surface == land.SurfaceType.RUNWAY) then
+                    local _rescuegroup = industry.cloneUnitToInfantry(event.initiator, _coalition, _country)
+                    local _landpoint = _point
+                    _landpoint.x = _landpoint.x + 12
+                    _landpoint.y = _landpoint.y + 10
+
+                    env.info(string.format("Pilot %s (%s) landed, SAR %s sent to loation", _name, _rescuegroup, _SARname), false)
+
+                    local lat, lon, alt = coord.LOtoLL(_point)
+                    trigger.action.outTextForCoalition(_coalition, string.format("Pilot down, parachute spotted at %s. SAR mission started", mist.tostringLL(lat, lon, 3)), 10)
+
+                    _path[#_path+1] = {
+                        type = "Turning Point",
+                        action = "Turning Point",
+                        form = "Turning Point",
+                        x = _point.x,
+                        y = _point.y,
+                        alt = math.random(200, 400),
+                        alt_type = "BARO",
+                        speed = math.random(60, 100),
+                        task = {
+                            id = "ComboTask",
+                            params = {
+                                tasks = {
+                                    [1] = {
+                                        id = "Land",
+                                        params = {
+                                            point = _landpoint,
+                                            duration = math.random(20, 120),
+                                            durationFlag = true
+                                        }
+                                    },
+                                    [2] = {
+                                        id = "WrappedAction",
+                                        params = {
+                                            action = {
+                                                id = "Script",
+                                                params = {
+                                                    command = 'if (Group.getByName(\'' .. _rescuegroup .. '\'):isExist()) then\nGroup.getByName(\'' .. _rescuegroup .. '\'):destroy()\nend'
+                                                --    command = ''
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    local _grouptable = industry.cloneGroupNewRoute(_SARname, _path)    
+                    local _group = Group.getByName(_grouptable["name"])
+                    
+                    _group:getController():setCommand({
+                        id = 'Start', 
+                        params = {}
+                    })
+                else
+                    event.initiator:destroy()
+                end
+            end
+        end
+
         if (_groupname) then
             -- plane landed and engine shut off. Despawn unit to enable respawn of group
             if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
-                if (industry.respawnGroup[_groupname]) then  
+                if (industry.respawnGroup[_groupname] or event.initiator:getPlayerName() == nil) then  
                     event.initiator:destroy()
                     trigger.action.setUserFlag(_name .. '_landed', true)
                 end
@@ -471,7 +645,7 @@ function industry.eventHandler:onEvent(event)
             end
 
             -- unit is lost / pre-destroyed
-            if (event.id == world.event.S_EVENT_UNIT_LOST) then                
+            if (event.id == world.event.S_EVENT_UNIT_LOST and mist.getGroupPayload(_groupname)) then                
                 if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'static') then
                     -- handle factory destruction
                     if (string.match(_name,'Factory.*')) then

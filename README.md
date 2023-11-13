@@ -202,6 +202,9 @@ Some events set custom flags to be used outside the script and directly in the m
 ### Destroyed objectives
 For each destroyed objective a custom flag is set to true.
 
+### Automatic CSAR misions
+If a pilot succesfully landed his parachute (player or AI) industry creates an automatic CSAR mission. You only have to have an uncontrolled helicopter unit on each side named blueSAR or redSAR (name of the group). Ideally the helicopter should have a recognizeable livery to show them as CSAR missions.
+
 ```
 [name of object]_destroyed
 ```
