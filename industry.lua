@@ -28,6 +28,7 @@ industry.respawnTries = {[coalition.side.RED] = 0, [coalition.side.BLUE] = 0}
 industry.winner = nil
 industry.winCountdown = 600
 industry.downedPilotCounter = 0
+industry.sarmissioncounter = 0
 
 industry.coalitionNameToId = {
     ["neutral"] = 0,
@@ -123,11 +124,12 @@ end
 -- Clone group by name with new route
 -- Uses Mist
 ---------------------------------------------------------
-function industry.cloneGroupNewRoute(gpName, route)
+function industry.cloneGroupNewRoute(gpName, route, newgroupname)
     local vars = {}
     vars.gpName = gpName
     vars.action = 'clone'
     vars.route = route
+    vars.newGroupName = newgroupname or nil
     local newGroup = mist.teleportToPoint(vars)
     return newGroup
 end
@@ -526,9 +528,18 @@ function industry.eventHandler:onEvent(event)
     -- events to handle
     if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN or 
             event.id == world.event.S_EVENT_UNIT_LOST or
+            event.id == world.event.S_EVENT_KILL or
             event.id == world.event.S_EVENT_EJECTION or
             event.id == world.event.S_EVENT_LANDING_AFTER_EJECTION) then
-        local _name = event.initiator:getName()
+        local _name = 'unset'
+        if (event.initiator and event.initiator:getName()) then
+            _name = event.initiator:getName()
+        else if (event.initiator and event.initiator:getTypeName()) then
+                _name = event.initiator:getTypeName()
+            else
+                _name = 'unknown initiator'
+            end
+        end
         env.info(string.format("Handling event ID %d Unit %s", event.id, _name), false)
         local _groupname = industry.getGroupNameByUnitName(_name)
 
@@ -548,8 +559,8 @@ function industry.eventHandler:onEvent(event)
                         _country = 0
                     else
                         env.info(string.format("ERROR unhandled type: %s country: %d coalition: %d", _name, _country, _coalition), false)
-                        _coalition = 1
-                        _country = 0
+                        _coalition = 2
+                        _country = 2
                     end
                 end
             end
@@ -612,9 +623,11 @@ function industry.eventHandler:onEvent(event)
                                 }
                             }
                         }
-                    }
+                    }                    
 
-                    local _grouptable = industry.cloneGroupNewRoute(_SARname, _path)    
+                    industry.sarmissioncounter = industry.sarmissioncounter + 1
+                    local _newsarname = string.format("%s-%d", _SARname, industry.sarmissioncounter)
+                    local _grouptable = industry.cloneGroupNewRoute(_SARname, _path, _newsarname)
                     local _group = Group.getByName(_grouptable["name"])
                     
                     _group:getController():setCommand({
@@ -628,6 +641,20 @@ function industry.eventHandler:onEvent(event)
         end
 
         if (_groupname) then
+            -- player killed SAR unit, reduce tickets
+            if (event.id == world.event.S_EVENT_KILL and event.initiator:getPlayerName() ~= nil) then            
+                if (event.target:getGroup()) then
+                    local _targetGroupName = event.target:getGroup():getName()
+                    if (string.match(_targetGroupName,'blueSAR.*') or string.match(_targetGroupName,'redSAR.*')) then
+                        trigger.action.outText(string.format("Player %s shot down SAR unit %s", event.initiator:getPlayerName(), _targetGroupName), 10)
+    
+                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
+                    else
+                        trigger.action.outText(string.format("Player %s shot down %s", event.initiator:getPlayerName(), _targetGroupName), 10)
+                    end
+                end
+            end
+
             -- plane landed and engine shut off. Despawn unit to enable respawn of group
             if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
                 if (industry.respawnGroup[_groupname] or event.initiator:getPlayerName() == nil) then  
