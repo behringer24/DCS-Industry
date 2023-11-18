@@ -643,7 +643,7 @@ function industry.eventHandler:onEvent(event)
         if (_groupname) then
             -- player killed SAR unit, reduce tickets
             if (event.id == world.event.S_EVENT_KILL and event.initiator:getPlayerName() ~= nil) then            
-                if (event.target and event.target:getCategory() == Group.Category.HELICOPTER and event.target:getGroup()) then
+                if (event.target and event.target:getDesc().category == Unit.Category.HELICOPTER and event.target:getGroup()) then
                     local _targetGroupName = event.target:getGroup():getName()
                     if (string.match(_targetGroupName,'blueSAR.*') or string.match(_targetGroupName,'redSAR.*')) then
                         trigger.action.outText(string.format("Player %s shot down SAR unit %s", event.initiator:getPlayerName(), _targetGroupName), 10)
@@ -672,8 +672,8 @@ function industry.eventHandler:onEvent(event)
             end
 
             -- unit is lost / pre-destroyed
-            if (event.id == world.event.S_EVENT_UNIT_LOST and mist.getGroupPayload(_groupname)) then                
-                if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'static') then
+            if (event.id == world.event.S_EVENT_UNIT_LOST) then                
+                if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.STRUCTURE) then
                     -- handle factory destruction
                     if (string.match(_name,'Factory.*')) then
                         local _pos = event.initiator:getPosition().p
@@ -718,7 +718,7 @@ function industry.eventHandler:onEvent(event)
                 end
 
                 -- vehicle destruction adds a fire and smoke
-                if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category == 'vehicle') then
+                if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.GROUND_UNIT) then
                     local _pos = event.initiator:getPosition().p
                     if (_pos) then
                         trigger.action.effectSmokeBig(_pos, 1, 0.5)
@@ -727,7 +727,7 @@ function industry.eventHandler:onEvent(event)
                 end
 
                 -- player plane destruction reduces tickets
-                if (mist.getGroupData(_groupname) and mist.getGroupData(_groupname).category ~= 'vehicle' and mist.getGroupData(_groupname).category ~= 'static' and event.initiator:getPlayerName() ~= nil) then
+                if (event.initiator:getDesc() and event.initiator:getDesc().category ~= Unit.Category.GROUND_UNIT and event.initiator:getDesc().category ~= Unit.Category.STRUCTURE and event.initiator:getPlayerName() ~= nil) then
                     env.info(string.format("Player %s (%s) killed. Reduce tickets of %s", event.initiator:getPlayerName(), _name, industry.getCoalitionByGroupname(_groupname)))
                     industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
                 end
