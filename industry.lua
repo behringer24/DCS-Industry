@@ -518,6 +518,23 @@ function industry.tickerTickets()
     end
 end
 
+function industry.removeScenery(_point, _radius)
+    local volS = {
+        id = world.VolumeType.SPHERE,
+        params = {
+            point = _point,
+            radius = _radius
+        }
+    }
+
+    local ifFound = function(foundItem, val)
+        foundItem:destroy()
+        return true
+    end
+
+    world.searchObjects(Object.Category.SCENERY, volS, ifFound)
+end
+
 ---------------------------------------------------------
 -- Event handler for landings and units lost
 -- despawns landed units when engine shuts down
@@ -582,7 +599,9 @@ function industry.eventHandler:onEvent(event)
                     _landpoint.x = _landpoint.x + 12
                     _landpoint.y = _landpoint.y + 10
 
-                    env.info(string.format("Pilot %s (%s) landed, SAR %s sent to loation", _name, _rescuegroup, _SARname), false)
+                    env.info(string.format("Pilot %s (%s) landed, SAR %s sent to loation", _name, _rescuegroup, _SARname), false)   
+                    
+                    industry.removeScenery(_landpoint, 500)
 
                     local lat, lon, alt = coord.LOtoLL(_point)
                     trigger.action.outTextForCoalition(_coalition, string.format("Pilot down, parachute spotted at %s. SAR mission started", mist.tostringLL(lat, lon, 3)), 10)
