@@ -123,6 +123,7 @@ industry.config.checkDeadGroupsTime = 300
 industry.config.respawnRetriesOnQueue = 2
 industry.config.winCountdownLength = 600
 industry.config.tickets = 100
+industry.config.ticketsLow = 20
 ```
 
 #### industry.config.startRessources
@@ -232,6 +233,15 @@ blueStorageDestroyed // if it was a blue storage that got destroyed
 ```
 
 In the class type triggers do not forget the flag back to false or 0 after it got handled in the editor so it can be handled multiple times (if needed).
+
+### Threshold for tickets
+If the tickets of one side run below a threshold a corresponding trigger ("ticketsLowBlue" or "ticketsLowRed") is set to true. You can use this trigger to switch events in your custom mission.
+
+The threshold is configured by the variable
+```
+industry.config.ticketsLow = 20 // default
+```
+and can be set in your config.
 
 ### Plane landed
 If a plane landed and shut down its engines a flag with the name
