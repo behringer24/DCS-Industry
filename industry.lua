@@ -14,6 +14,7 @@ industry.config = {
     respawnRetriesOnQueue = 2,
     winCountdownLength = 600,
     tickets = 100,
+    ticketsLow = 20,
 }
 
 industry.version = "v0.10.1"
@@ -484,6 +485,14 @@ function industry.evaluateTicketWinner()
                 industry.winMission(coalition.side.NEUTRAL)
             end
         end
+    end
+
+    if (industry.tickets[coalition.side.RED] <= industry.config.ticketsLow) then
+        trigger.action.setUserFlag('ticketsLowRed', true)
+    end
+
+    if (industry.tickets[coalition.side.BLUE] <= industry.config.ticketsLow) then
+        trigger.action.setUserFlag('ticketsLowBlue', true)
     end
 end
 
