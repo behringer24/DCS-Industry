@@ -17,7 +17,7 @@ industry.config = {
     ticketsLow = 20,
 }
 
-industry.version = "v0.11.0"
+industry.version = "v1.4.0"
 industry.ressources = {[coalition.side.RED] = 200, [coalition.side.BLUE] = 200}
 industry.factories = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
 industry.storages = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
