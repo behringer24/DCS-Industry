@@ -643,7 +643,7 @@ function industry.eventHandler:onEvent(event)
         if (_groupname) then
             -- player killed SAR unit, reduce tickets
             if (event.id == world.event.S_EVENT_KILL and event.initiator:getPlayerName() ~= nil) then            
-                if (event.target and event.target:getDesc().category == Unit.Category.HELICOPTER) then
+                if (event.target and event.target:getDesc().category == Unit.Category.HELICOPTER and event.target:getGroup()) then
                     local _targetGroupName = event.target:getGroup():getName()
                     if (string.match(_targetGroupName,'blueSAR.*') or string.match(_targetGroupName,'redSAR.*')) then
                         trigger.action.outText(string.format("Player %s shot down SAR unit %s", event.initiator:getPlayerName(), _targetGroupName), 10)
