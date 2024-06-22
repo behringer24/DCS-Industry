@@ -54,6 +54,11 @@ Storages hold 1000 tons of ressources per default until they are destroyed.
 
 Ressources are distributed evenly between storages. If a storage is destroyed then the ressources are lost in the quota that had been hold in that storage.
 
+### Adding additional objectives
+Any static object can be aded as an additional objective to the mission. These objectives are regarded as optional and are useful as additional strike missions.
+
+To be detected / handled as an aditional objective, the static object unit name just has to start with "Secondary[...]".
+
 ### Adding convoys
 Create a group that acts as a convoy and set its waypoints.
 
