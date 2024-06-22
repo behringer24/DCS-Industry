@@ -17,7 +17,7 @@ industry.config = {
     ticketsLow = 20,
 }
 
-industry.version = "v0.10.1"
+industry.version = "v0.11.0"
 industry.ressources = {[coalition.side.RED] = 200, [coalition.side.BLUE] = 200}
 industry.factories = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
 industry.storages = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
@@ -42,6 +42,8 @@ industry.coalitionIdToName = {
     [1] = "red",
     [2] = "blue"
 }
+
+industry.mapMarkers = {}
 
 ---------------------------------------------------------
 -- Queue implementation
@@ -274,6 +276,64 @@ function industry.addRessourcesConvoy(groupName, truckTypeName, tonsEach)
         trigger.action.outText(string.format("A %s convoy with %d tons of ressources arrived at its destination", industry.coalitionIdToName[_group:getCoalition()], _addRessources), 5)
         industry.addRessources(_group:getCoalition(), _addRessources)
     end
+end
+
+---------------------------------------------------------
+-- Production loop
+-- adds ressources from factories
+-- also counts factories and storages
+---------------------------------------------------------
+function industry.PrepareMap()
+    trigger.action.outText("Marking map objects", 5)
+
+    for coal=1, 2 do
+        local _Objects = coalition.getStaticObjects(coal)
+        local _ObjectIds = 0
+        local _enemyCoal = 0
+
+        if (coal == 1) then
+            _enemyCoal = 2
+        else
+            _enemyCoal = 1
+        end
+
+        for k, v in pairs(_Objects) do
+            local _name = v:getName()
+            local _type = v:getTypeName()
+            local _pos = v:getPoint()
+            local _coalition = v:getCoalition()
+
+            if (string.match(_name, "Laboratory.*")) then
+                _ObjectIds = _ObjectIds + 1
+                trigger.action.markToCoalition(_ObjectIds , string.format("Laboratory of %s boosting factory production", industry.coalitionIdToName[coal]), _pos, _enemyCoal, true)
+                env.info(string.format("Object %s marked on Map as %d for coalition %d", _name, _ObjectIds, coal), false)
+                industry.mapMarkers[_name] = _ObjectIds
+            end
+
+            if (string.match(_name, "Factory.*")) then
+                _ObjectIds = _ObjectIds + 1
+                trigger.action.markToCoalition(_ObjectIds , string.format("Factory of %s producing ressources (Secondary target)", industry.coalitionIdToName[coal]), _pos, _enemyCoal, true)
+                env.info(string.format("Object %s marked on Map as %d for coalition %d", _name, _ObjectIds, coal), false)
+                industry.mapMarkers[_name] = _ObjectIds
+            end
+
+            if (string.match(_name, "Storage.*")) then            
+                _ObjectIds = _ObjectIds + 1
+                trigger.action.markToCoalition(_ObjectIds , string.format("Storage of %s for ressources (Primary target)", industry.coalitionIdToName[coal]), _pos, _enemyCoal, true)
+                env.info(string.format("Object %s marked on Map as %d for coalition %d", _name, _ObjectIds, coal), false)
+                industry.mapMarkers[_name] = _ObjectIds
+            end
+
+            if (string.match(_name, "Secondary.*")) then            
+                _ObjectIds = _ObjectIds + 1
+                trigger.action.markToCoalition(_ObjectIds , string.format("Operative target of %s (optional target)", industry.coalitionIdToName[coal]), _pos, _enemyCoal, true)
+                env.info(string.format("Object %s marked on Map as %d for coalition %d", _name, _ObjectIds, coal), false)
+                industry.mapMarkers[_name] = _ObjectIds
+            end
+        end
+    end
+
+    trigger.action.outText("Map objects marked", 10)
 end
 
 ---------------------------------------------------------
@@ -703,6 +763,21 @@ function industry.eventHandler:onEvent(event)
             -- unit is lost / pre-destroyed
             if (event.id == world.event.S_EVENT_UNIT_LOST) then                
                 if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.STRUCTURE) then
+                    if (industry.mapMarkers[_name]) then
+                        trigger.action.removeMark(industry.mapMarkers[_name])
+                    end
+
+                    -- handle secondary target destruction
+                    if (string.match(_name,'Secondary.*')) then
+                        local _pos = event.initiator:getPosition().p
+                        trigger.action.effectSmokeBig(_pos, 3, 0.75)
+                        trigger.action.setUserFlag(_name .. '_destroyed', true)
+                        trigger.action.setUserFlag(string.format("%sSecondaryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
+                        trigger.action.outText(string.format("Secondary Target of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
+
+                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
+                    end
+                    
                     -- handle factory destruction
                     if (string.match(_name,'Factory.*')) then
                         local _pos = event.initiator:getPosition().p
@@ -711,7 +786,7 @@ function industry.eventHandler:onEvent(event)
                         trigger.action.setUserFlag(string.format("%sFactoryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
                         trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
-                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 5)
+                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 10)
                     end
 
                     -- handle storage destruction
@@ -731,7 +806,7 @@ function industry.eventHandler:onEvent(event)
                         trigger.action.setUserFlag(string.format("%sLaboratoryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
                         trigger.action.outText(string.format("Laboratory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
-                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
+                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 5)
                     end
 
                     -- handle HQ destruction
@@ -802,5 +877,6 @@ end
 -- Init Industry script
 ---------------------------------------------------------
 industry.addRadioMenu()
+industry.PrepareMap()
 mist.scheduleFunction(industry.scheduleHandlers,{} , timer.getTime() + 5)
 env.info('Industry ' .. industry.version .. ' initialized')
