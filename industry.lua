@@ -702,7 +702,7 @@ function industry.eventHandler:onEvent(event)
                                             action = {
                                                 id = "Script",
                                                 params = {
-                                                    command = 'if (Group.getByName(\'' .. _rescuegroup .. '\') && Group.getByName(\'' .. _rescuegroup .. '\'):isExist()) then\nGroup.getByName(\'' .. _rescuegroup .. '\'):destroy()\nend'
+                                                    command = 'if (Group.getByName(\'' .. _rescuegroup .. '\') and Group.getByName(\'' .. _rescuegroup .. '\'):isExist()) then\nGroup.getByName(\'' .. _rescuegroup .. '\'):destroy()\nend'
                                                 --    command = ''
                                                 }
                                             }

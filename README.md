@@ -9,6 +9,8 @@ the difference. Industry can be used for single- or multiplayer missions.
 Ressources are generated through factories. Production is increased per laboratory and ressources are evenly
 stored in storage facilities. All are represented by static units of your choice, they only have to have the correct unit names (see below).
 
+Discuss on Discord: https://discord.gg/bTzjqZKa
+
 ## Features
 - Regular production of new ressources in factories
 - Delivery of ressources by aerial transport missions or convoys on the ground
