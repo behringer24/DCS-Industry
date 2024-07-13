@@ -723,21 +723,22 @@ function industry.eventHandler:onEvent(event)
         end
 
         -- player killed SAR unit, reduce tickets
-        if (event.id == world.event.S_EVENT_KILL and event.initiator.getPlayerName ~= nil) then            
+        if (event.id == world.event.S_EVENT_KILL and event.initiator.getPlayerName ~= nil and event.initiator:getPlayerName() ~= nil) then            
             if (event.target and event.target:getDesc().category == Unit.Category.HELICOPTER and event.target.getGroup ~= nil) then
                 local _targetGroupName = event.target:getGroup():getName()
                 local _groupname = industry.getGroupNameByUnitName(event.initiator:getName()) or 'unknown group'
+                local _playerName = event.initiator:getPlayerName() or 'unknown player name'
 
                 env.info(string.format("Handling event KILL for Unit %s", _targetGroupName), false)
 
                 if (string.match(_targetGroupName,'blueSAR.*') or string.match(_targetGroupName,'redSAR.*')) then
-                    trigger.action.outText(string.format("Player %s shot down SAR unit %s", event.initiator:getPlayerName(), _targetGroupName), 10)
+                    trigger.action.outText(string.format("Player %s shot down SAR unit %s", _playerName, _targetGroupName), 10)
                     industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
                 else
-                    trigger.action.outText(string.format("Player %s shot down %s", event.initiator:getPlayerName(), _targetGroupName), 10)
+                    trigger.action.outText(string.format("Player %s shot down %s", _playerName, _targetGroupName), 10)
                 end
             else
-                env.info(string.format("Kill event with no target, no group or no heligroup in %s", _groupname), false)
+                env.info("Kill event with no target, no group or no heligroup in KILL event", false)
             end
         end
 
@@ -843,8 +844,9 @@ function industry.eventHandler:onEvent(event)
             end
 
             -- player plane destruction reduces tickets
-            if (event.initiator:getDesc() and event.initiator:getDesc().category ~= Unit.Category.GROUND_UNIT and event.initiator:getDesc().category ~= Unit.Category.STRUCTURE and event.initiator.getPlayerName ~= nil) then
-                env.info(string.format("Player %s (%s) killed. Reduce tickets of %s", event.initiator:getPlayerName(), _name, industry.getCoalitionByGroupname(_groupname)))
+            if (event.initiator.getDesc ~= nil and event.initiator:getDesc().category ~= Unit.Category.GROUND_UNIT and event.initiator:getDesc().category ~= Unit.Category.STRUCTURE and event.initiator.getPlayerName ~= nil) then
+                local _playerName = event.initiator:getPlayerName() or 'unknown playername'
+                env.info(string.format("Player %s (%s) killed. Reduce tickets of %s", _playerName, _name, industry.getCoalitionByGroupname(_groupname)))
                 industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
             end
 
