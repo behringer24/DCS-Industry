@@ -19,10 +19,11 @@ Discuss on Discord: https://discord.gg/bTzjqZKa
 - Respawns (of AI units for now) depending on available ressources
 - Automatic handling of AI unit crashes, dead groups, RTB on bingo fuel or out of ammo
 - factories, storages and transports can (and should) be destroyed in player or AI missions
+- additional optional 'secondary' strike objectives can be placed to allow casual scoring
 - mission ends if no storages are left (limits ressources to 0) and allows a 10 minutes countdown
 
 ## Requirements
-Industry relies on MIST. The latest tested version to work with Industry is MIST version 4.4.107
+Industry relies on MIST. The latest tested version to work with Industry is MIST version 4.5.126
 - Wiki/Homepage: https://wiki.hoggitworld.com/view/Mission_Scripting_Tools_Documentation
 - ED-Forum: https://forum.dcs.world/topic/82178-mission-scripting-tools-mist-enhancing-mission-scripting-lua
 - GitHub: https://github.com/mrSkortch/MissionScriptingTools

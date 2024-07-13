@@ -617,23 +617,17 @@ function industry.eventHandler:onEvent(event)
             event.id == world.event.S_EVENT_KILL or
             event.id == world.event.S_EVENT_EJECTION or
             event.id == world.event.S_EVENT_LANDING_AFTER_EJECTION) then
-        local _name = 'unset'
-        if (event.initiator and event.initiator:getName()) then
-            _name = event.initiator:getName()
-        else if (event.initiator and event.initiator:getTypeName()) then
-                _name = event.initiator:getTypeName()
-            else
-                _name = 'unknown initiator'
-            end
-        end
-        env.info(string.format("Handling event ID %d Unit %s", event.id, _name), false)
+
         local _groupname = industry.getGroupNameByUnitName(_name)
 
         -- spawn SAR type heli mission if blueSAR or redSAR exists. has to have a waypoint 2 with the task landing as first task
         if (event.id == world.event.S_EVENT_LANDING_AFTER_EJECTION) then
+            local _name = event.initiator:getName()
             local _coalition = event.initiator:getCoalition()            
             local _country = event.initiator:getCountry()
             local _SARname = ''
+
+            env.info(string.format("Handling event LANDING_AFTER_EJECTION for Unit %s", _name), false)
 
             -- sanitize weird results where coalition and country (99?) where off in some missions
             if (_coalition == 0 or _country > 99) then
@@ -728,116 +722,133 @@ function industry.eventHandler:onEvent(event)
             end
         end
 
-        if (_groupname) then
-            -- player killed SAR unit, reduce tickets
-            if (event.id == world.event.S_EVENT_KILL and event.initiator:getPlayerName() ~= nil) then            
-                if (event.target and event.target:getDesc().category == Unit.Category.HELICOPTER and event.target:getGroup()) then
-                    local _targetGroupName = event.target:getGroup():getName()
-                    if (string.match(_targetGroupName,'blueSAR.*') or string.match(_targetGroupName,'redSAR.*')) then
-                        trigger.action.outText(string.format("Player %s shot down SAR unit %s", event.initiator:getPlayerName(), _targetGroupName), 10)
-                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
-                    else
-                        trigger.action.outText(string.format("Player %s shot down %s", event.initiator:getPlayerName(), _targetGroupName), 10)
-                    end
+        -- player killed SAR unit, reduce tickets
+        if (event.id == world.event.S_EVENT_KILL and event.initiator.getPlayerName ~= nil) then            
+            if (event.target and event.target:getDesc().category == Unit.Category.HELICOPTER and event.target.getGroup ~= nil) then
+                local _targetGroupName = event.target:getGroup():getName()
+                local _groupname = industry.getGroupNameByUnitName(event.initiator:getName()) or 'unknown group'
+
+                env.info(string.format("Handling event KILL for Unit %s", _targetGroupName), false)
+
+                if (string.match(_targetGroupName,'blueSAR.*') or string.match(_targetGroupName,'redSAR.*')) then
+                    trigger.action.outText(string.format("Player %s shot down SAR unit %s", event.initiator:getPlayerName(), _targetGroupName), 10)
+                    industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
                 else
-                    env.info(string.format("Kill event with no target, no group or no heligroup in %s", _groupname), false)
+                    trigger.action.outText(string.format("Player %s shot down %s", event.initiator:getPlayerName(), _targetGroupName), 10)
                 end
+            else
+                env.info(string.format("Kill event with no target, no group or no heligroup in %s", _groupname), false)
             end
+        end
 
-            -- plane landed and engine shut off. Despawn unit to enable respawn of group
-            if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
-                if (industry.respawnGroup[_groupname] or event.initiator:getPlayerName() == nil) then  
-                    event.initiator:destroy()
-                    trigger.action.setUserFlag(_name .. '_landed', true)
-                end
+        -- plane landed and engine shut off. Despawn unit to enable respawn of group
+        if (event.id == world.event.S_EVENT_ENGINE_SHUTDOWN) then
+            local _name = event.initiator:getName()
+            local _groupname = industry.getGroupNameByUnitName(event.initiator:getName())
+
+            env.info(string.format("Handling event ENGINE_SHUTDOWN for Unit %s", _name), false)
+
+            if (industry.respawnGroup[_groupname] or event.initiator.getPlayerName == nil) then  
+                event.initiator:destroy()
+                trigger.action.setUserFlag(_name .. '_landed', true)
             end
+        end
 
-            -- pilot jumps from plane. Explode plane to handle landed helis that do not despawn
-            if (event.id == world.event.S_EVENT_EJECTION) then
-                if (industry.respawnGroup[_groupname]) then                    
-                    trigger.action.explosion(event.initiator:getPosition().p, 400)
-                    env.info(string.format("Pilot ejected from unit %s, explode it", _name), false)
-                end
+        -- pilot jumps from plane. Explode plane to handle landed helis that do not despawn
+        if (event.id == world.event.S_EVENT_EJECTION) then
+            local _name = event.initiator:getName()
+            local _groupname = industry.getGroupNameByUnitName(event.initiator:getName())
+
+            env.info(string.format("Handling event EJECTION for Unit %s", _name), false)
+
+            if (industry.respawnGroup[_groupname]) then                    
+                trigger.action.explosion(event.initiator:getPosition().p, 400)
+                env.info(string.format("Pilot ejected from unit %s, explode it", _name), false)
             end
+        end
 
-            -- unit is lost / pre-destroyed
-            if (event.id == world.event.S_EVENT_UNIT_LOST) then                
-                if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.STRUCTURE) then
-                    if (industry.mapMarkers[_name]) then
-                        trigger.action.removeMark(industry.mapMarkers[_name])
-                    end
+        -- unit is lost / pre-destroyed
+        if (event.id == world.event.S_EVENT_UNIT_LOST) then      
+            local _name = event.initiator:getName() or 'unknow name'
+            local _groupname = industry.getGroupNameByUnitName(event.initiator:getName()) or 'unknown group'
 
-                    -- handle secondary target destruction
-                    if (string.match(_name,'Secondary.*')) then
-                        local _pos = event.initiator:getPosition().p
-                        trigger.action.effectSmokeBig(_pos, 3, 0.75)
-                        trigger.action.setUserFlag(_name .. '_destroyed', true)
-                        trigger.action.setUserFlag(string.format("%sSecondaryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
-                        trigger.action.outText(string.format("Secondary Target of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
+            env.info(string.format("Handling event UNIT_LOST for Unit %s", _name), false)
 
-                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
-                    end
-                    
-                    -- handle factory destruction
-                    if (string.match(_name,'Factory.*')) then
-                        local _pos = event.initiator:getPosition().p
-                        trigger.action.effectSmokeBig(_pos, 3, 0.75)
-                        trigger.action.setUserFlag(_name .. '_destroyed', true)
-                        trigger.action.setUserFlag(string.format("%sFactoryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
-                        trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
-
-                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 10)
-                    end
-
-                    -- handle storage destruction
-                    if (string.match(_name,'Storage.*')) then
-                        local _pos = event.initiator:getPosition().p
-                        trigger.action.effectSmokeBig(_pos, 3, 0.5)
-                        trigger.action.setUserFlag(_name .. '_destroyed', true)
-                        trigger.action.setUserFlag(string.format("%sStorageDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
-                        industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
-                    end
-
-                    -- handle laboratory destruction
-                    if (string.match(_name,'Laboratory.*')) then
-                        local _pos = event.initiator:getPosition().p
-                        trigger.action.effectSmokeBig(_pos, 3, 0.5)
-                        trigger.action.setUserFlag(_name .. '_destroyed', true)
-                        trigger.action.setUserFlag(string.format("%sLaboratoryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
-                        trigger.action.outText(string.format("Laboratory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
-
-                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 5)
-                    end
-
-                    -- handle HQ destruction
-                    if (string.match(_name,'HQ.*')) then
-                        local _pos = event.initiator:getPosition().p
-                        trigger.action.effectSmokeBig(_pos, 3, 0.5)
-                        trigger.action.setUserFlag(_name .. '_destroyed', true)
-                        trigger.action.setUserFlag(string.format("%sHQDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
-                        trigger.action.outText(string.format("HQ of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
-
-                        industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), math.floor(industry.tickets[industry.getCoalitionByGroupname(_groupname)] / 2))
-                    end
+            if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.STRUCTURE) then
+                if (industry.mapMarkers[_name]) then
+                    trigger.action.removeMark(industry.mapMarkers[_name])
                 end
 
-                -- vehicle destruction adds a fire and smoke
-                if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.GROUND_UNIT) then
+                -- handle secondary target destruction
+                if (string.match(_name,'Secondary.*')) then
                     local _pos = event.initiator:getPosition().p
-                    if (_pos) then
-                        trigger.action.effectSmokeBig(_pos, 1, 0.5)
-                        env.info(string.format("Spawn smoke effect at unit location %s", _name))
-                    end
-                end
+                    trigger.action.effectSmokeBig(_pos, 3, 0.75)
+                    trigger.action.setUserFlag(_name .. '_destroyed', true)
+                    trigger.action.setUserFlag(string.format("%sSecondaryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
+                    trigger.action.outText(string.format("Secondary Target of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
 
-                -- player plane destruction reduces tickets
-                if (event.initiator:getDesc() and event.initiator:getDesc().category ~= Unit.Category.GROUND_UNIT and event.initiator:getDesc().category ~= Unit.Category.STRUCTURE and event.initiator:getPlayerName() ~= nil) then
-                    env.info(string.format("Player %s (%s) killed. Reduce tickets of %s", event.initiator:getPlayerName(), _name, industry.getCoalitionByGroupname(_groupname)))
                     industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
                 end
+                
+                -- handle factory destruction
+                if (string.match(_name,'Factory.*')) then
+                    local _pos = event.initiator:getPosition().p
+                    trigger.action.effectSmokeBig(_pos, 3, 0.75)
+                    trigger.action.setUserFlag(_name .. '_destroyed', true)
+                    trigger.action.setUserFlag(string.format("%sFactoryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
+                    trigger.action.outText(string.format("Factory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
+
+                    industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 10)
+                end
+
+                -- handle storage destruction
+                if (string.match(_name,'Storage.*')) then
+                    local _pos = event.initiator:getPosition().p
+                    trigger.action.effectSmokeBig(_pos, 3, 0.5)
+                    trigger.action.setUserFlag(_name .. '_destroyed', true)
+                    trigger.action.setUserFlag(string.format("%sStorageDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
+                    industry.destroyStorage(industry.getCoalitionByGroupname(_groupname))
+                end
+
+                -- handle laboratory destruction
+                if (string.match(_name,'Laboratory.*')) then
+                    local _pos = event.initiator:getPosition().p
+                    trigger.action.effectSmokeBig(_pos, 3, 0.5)
+                    trigger.action.setUserFlag(_name .. '_destroyed', true)
+                    trigger.action.setUserFlag(string.format("%sLaboratoryDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
+                    trigger.action.outText(string.format("Laboratory of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
+
+                    industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 5)
+                end
+
+                -- handle HQ destruction
+                if (string.match(_name,'HQ.*')) then
+                    local _pos = event.initiator:getPosition().p
+                    trigger.action.effectSmokeBig(_pos, 3, 0.5)
+                    trigger.action.setUserFlag(_name .. '_destroyed', true)
+                    trigger.action.setUserFlag(string.format("%sHQDestroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), true)
+                    trigger.action.outText(string.format("HQ of %s coalition destroyed", industry.coalitionIdToName[industry.getCoalitionByGroupname(_groupname)]), 10)
+
+                    industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), math.floor(industry.tickets[industry.getCoalitionByGroupname(_groupname)] / 2))
+                end
             end
 
-            -- if group has only this one (now dead) unit left, queue for respawn
+            -- vehicle destruction adds a fire and smoke
+            if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.GROUND_UNIT) then
+                local _pos = event.initiator:getPosition().p
+                if (_pos) then
+                    trigger.action.effectSmokeBig(_pos, 1, 0.5)
+                    env.info(string.format("Spawn smoke effect at unit location %s", _name))
+                end
+            end
+
+            -- player plane destruction reduces tickets
+            if (event.initiator:getDesc() and event.initiator:getDesc().category ~= Unit.Category.GROUND_UNIT and event.initiator:getDesc().category ~= Unit.Category.STRUCTURE and event.initiator.getPlayerName ~= nil) then
+                env.info(string.format("Player %s (%s) killed. Reduce tickets of %s", event.initiator:getPlayerName(), _name, industry.getCoalitionByGroupname(_groupname)))
+                industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
+            end
+
+            -- if group has only this one (now dead) unit left, queue for respawn        
             local _group = Group.getByName(_groupname)
             if ((_group == nil or #_group:getUnits() < 2) and industry.respawnGroup[_groupname]) then
                 industry.queueRespawn(_groupname, industry.respawnGroup[_groupname])
