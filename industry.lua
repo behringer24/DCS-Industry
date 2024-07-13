@@ -749,7 +749,7 @@ function industry.eventHandler:onEvent(event)
 
             env.info(string.format("Handling event ENGINE_SHUTDOWN for Unit %s", _name), false)
 
-            if (industry.respawnGroup[_groupname] or event.initiator.getPlayerName == nil) then  
+            if (industry.respawnGroup[_groupname] or event.initiator.getPlayerName == nil or event.initiator.getPlayerName() == nil) then  
                 event.initiator:destroy()
                 trigger.action.setUserFlag(_name .. '_landed', true)
             end
@@ -844,7 +844,7 @@ function industry.eventHandler:onEvent(event)
             end
 
             -- player plane destruction reduces tickets
-            if (event.initiator.getDesc ~= nil and event.initiator:getDesc().category ~= Unit.Category.GROUND_UNIT and event.initiator:getDesc().category ~= Unit.Category.STRUCTURE and event.initiator.getPlayerName ~= nil) then
+            if (event.initiator.getDesc ~= nil and event.initiator:getDesc().category ~= Unit.Category.GROUND_UNIT and event.initiator:getDesc().category ~= Unit.Category.STRUCTURE and event.initiator.getPlayerName ~= nil and event.initiator:getPlayerName() ~= nil) then
                 local _playerName = event.initiator:getPlayerName() or 'unknown playername'
                 env.info(string.format("Player %s (%s) killed. Reduce tickets of %s", _playerName, _name, industry.getCoalitionByGroupname(_groupname)))
                 industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
