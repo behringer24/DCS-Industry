@@ -749,7 +749,7 @@ function industry.eventHandler:onEvent(event)
 
             env.info(string.format("Handling event ENGINE_SHUTDOWN for Unit %s", _name), false)
 
-            if (industry.respawnGroup[_groupname] or event.initiator.getPlayerName == nil or event.initiator.getPlayerName() == nil) then  
+            if (industry.respawnGroup[_groupname] or event.initiator.getPlayerName == nil or event.initiator:getPlayerName() == nil) then  
                 event.initiator:destroy()
                 trigger.action.setUserFlag(_name .. '_landed', true)
             end
