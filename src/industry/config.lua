@@ -45,6 +45,9 @@ config.defaults = {
         groups = {},
         -- AI aircraft that shut down their engines are removed (parking space)
         despawnLandedAI = true,
+        -- damaged AI aircraft of respawn groups that sit on the ground without
+        -- moving at two dead checks in a row are removed, so the group respawns
+        removeStranded = true,
     },
 
     logistics = {

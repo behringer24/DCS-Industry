@@ -24,7 +24,8 @@ Discuss on Discord: https://discord.gg/bTzjqZKa
 - Strategic objectives (factories, laboratories, storages, HQs, secondary targets) marked on the F10 map
 - Automatic combat search and rescue missions for pilots that landed with the parachute
 - F10 statistics menu for every player, including dynamic slots
-- Robust against units that disappear without events (emergency landings, despawned wrecks)
+- Robust against units that disappear without events (emergency landings, despawned wrecks) and against
+  damaged aircraft that are stranded on the ground
 
 ## Requirements
 Nothing but DCS World. Industry 2 is built on [DCS Tarmac](https://github.com/behringer24/DCS-Tarmac), which is
@@ -100,6 +101,14 @@ the parking spot and lets respawn groups come back. The flag `<unit name>_landed
 DCS also reports an engine shutdown when a damaged aircraft loses its engines in flight; such aircraft are
 left alone until they crash, so the shooter keeps the kill.
 
+### Stranded aircraft
+A damaged aircraft that does not crash — an emergency landing in a field, a damaged helicopter that set down, a
+wreck left on a runway — raises no further event and would block its respawn group forever. Every
+`respawn.deadCheckInterval` seconds Industry checks the AI aircraft of respawn groups. One that is damaged (it was
+hit, its AI aborted the mission or it lost life), on the ground and not moving at two checks in a row is removed
+and counts as lost. If it is still there at the next check, it is blown up. Players and ground vehicles are never
+touched. Switch it off with `respawn.removeStranded = false`.
+
 ### Search and rescue
 Place one helicopter group named `TPL-SAR-Red` (rescues red pilots) and one named `TPL-SAR-Blue` (rescues blue
 pilots) with *uncontrolled* ticked, usually parked at an airbase. They may belong to any coalition — put them on
@@ -139,6 +148,7 @@ industry.setup({
         costs = { plane = 200, helicopter = 200, vehicle = 50, ship = 400 },
         groups = {},
         despawnLandedAI = true,
+        removeStranded = true, -- remove damaged aircraft stranded on the ground
     },
     logistics = {
         convoyPrefix = "Convoy",

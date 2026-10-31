@@ -49,6 +49,16 @@ function respawn.cost(groupName)
     return registered[groupName]
 end
 
+--- Names of all registered groups, sorted.
+function respawn.groups()
+    local list = {}
+    for groupName in pairs(registered) do
+        list[#list + 1] = groupName
+    end
+    table.sort(list)
+    return list
+end
+
 --- Registers a function(groupName, options) that may adjust the spawn
 -- options (e.g. the route) before a group respawns.
 function respawn.addModifier(fn)
