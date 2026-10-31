@@ -460,6 +460,15 @@ function csar.state(groupName)
     return mission and mission.state
 end
 
+-- Replaces a landed parachute by a soldier and sends the rescue.
+local function replaceParachute(unit, coalitionId, countryId, point)
+    local surface = land.getSurfaceType(point)
+    object.destroy(unit)
+    if surface == land.SurfaceType.LAND or surface == land.SurfaceType.ROAD or surface == land.SurfaceType.RUNWAY then
+        csar.startMission(coalitionId, countryId, point)
+    end
+end
+
 local function onParachuteLanded(event)
     local unit = event.initiator
     local coalitionId, countryId = pilotIdentity(unit)
@@ -470,11 +479,9 @@ local function onParachuteLanded(event)
     if point == nil then
         return
     end
-    local surface = land.getSurfaceType(point)
-    object.destroy(unit)
-    if surface == land.SurfaceType.LAND or surface == land.SurfaceType.ROAD or surface == land.SurfaceType.RUNWAY then
-        csar.startMission(coalitionId, countryId, point)
-    end
+    -- a second later, outside the event handler: DCS can trip over world
+    -- changes made while it dispatches an event
+    tarmac.scheduler.after(1, replaceParachute, unit, coalitionId, countryId, point)
 end
 
 local function targetGroupName(target)

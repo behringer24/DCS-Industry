@@ -27,7 +27,9 @@ local function onUnitLost(event)
     if category == Unit.Category.GROUND_UNIT and cfg.losses.vehicleSmoke then
         local point = object.point(unit)
         if point then
-            trigger.action.effectSmokeBig(point, 1, 0.5)
+            -- a second later, outside the event handler: DCS can trip over
+            -- world changes made while it dispatches an event
+            tarmac.scheduler.after(1, trigger.action.effectSmokeBig, point, 1, 0.5)
         end
     end
 

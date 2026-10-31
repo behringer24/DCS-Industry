@@ -156,9 +156,19 @@ function respawn.collectDead()
     end
 end
 
+local function blowUp(unit)
+    local point = object.exists(unit) and object.point(unit)
+    if point then
+        trigger.action.explosion(point, 400)
+        log:info("pilot ejected from %s, aircraft destroyed", tostring(object.name(unit)))
+    end
+end
+
 -- A pilot ejected from an aircraft of a respawn group: make sure the
 -- aircraft is destroyed so the group can respawn (helicopters that landed
--- damaged would otherwise stay forever).
+-- damaged would otherwise stay forever). The explosion follows a second
+-- later, outside the event handler: DCS can trip over world changes made
+-- while it dispatches an event, and the seat is clear of the aircraft by then.
 local function onEjection(event)
     local unit = event.initiator
     local groupName = object.groupName(unit)
@@ -167,11 +177,7 @@ local function onEjection(event)
         groupName = record and record.groupName
     end
     if groupName and registered[groupName] then
-        local point = object.point(unit)
-        if point then
-            trigger.action.explosion(point, 400)
-            log:info("pilot ejected from %s, aircraft destroyed", tostring(object.name(unit)))
-        end
+        tarmac.scheduler.after(1, blowUp, unit)
     end
 end
 

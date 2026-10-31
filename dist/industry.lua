@@ -1796,7 +1796,9 @@ function objectives.destroyed(name)
 
     tarmac.marks.remove(entry.markId)
     if entry.point then
-        trigger.action.effectSmokeBig(entry.point, 3, smokeDensity[entry.kind])
+        -- a second later, outside the event handler: DCS can trip over
+        -- world changes made while it dispatches an event
+        tarmac.scheduler.after(1, trigger.action.effectSmokeBig, entry.point, 3, smokeDensity[entry.kind])
     end
     trigger.action.setUserFlag(name .. "_destroyed", true)
     trigger.action.setUserFlag(side.name(entry.coalition) .. flagNames[entry.kind] .. "Destroyed", true)
@@ -2124,9 +2126,19 @@ function respawn.collectDead()
     end
 end
 
+local function blowUp(unit)
+    local point = object.exists(unit) and object.point(unit)
+    if point then
+        trigger.action.explosion(point, 400)
+        log:info("pilot ejected from %s, aircraft destroyed", tostring(object.name(unit)))
+    end
+end
+
 -- A pilot ejected from an aircraft of a respawn group: make sure the
 -- aircraft is destroyed so the group can respawn (helicopters that landed
--- damaged would otherwise stay forever).
+-- damaged would otherwise stay forever). The explosion follows a second
+-- later, outside the event handler: DCS can trip over world changes made
+-- while it dispatches an event, and the seat is clear of the aircraft by then.
 local function onEjection(event)
     local unit = event.initiator
     local groupName = object.groupName(unit)
@@ -2135,11 +2147,7 @@ local function onEjection(event)
         groupName = record and record.groupName
     end
     if groupName and registered[groupName] then
-        local point = object.point(unit)
-        if point then
-            trigger.action.explosion(point, 400)
-            log:info("pilot ejected from %s, aircraft destroyed", tostring(object.name(unit)))
-        end
+        tarmac.scheduler.after(1, blowUp, unit)
     end
 end
 
@@ -2387,6 +2395,11 @@ local airfield = {}
 
 local cfg
 
+local function remove(unit, unitName)
+    log:info("%s shut down its engines, removed", unitName)
+    tarmac.tracker.destroyUnit(unit)
+end
+
 local function onEngineShutdown(event)
     local unit = event.initiator
     local unitName = object.name(unit)
@@ -2400,8 +2413,9 @@ local function onEngineShutdown(event)
     logistics.landed(unit)
     trigger.action.setUserFlag(unitName .. "_landed", true)
     if cfg.respawn.despawnLandedAI then
-        log:info("%s shut down its engines, removed", unitName)
-        tarmac.tracker.destroyUnit(unit)
+        -- a second later, outside the event handler: DCS can trip over world
+        -- changes made while it dispatches an event
+        tarmac.scheduler.after(1, remove, unit, unitName)
     end
 end
 
@@ -2877,6 +2891,15 @@ function csar.state(groupName)
     return mission and mission.state
 end
 
+-- Replaces a landed parachute by a soldier and sends the rescue.
+local function replaceParachute(unit, coalitionId, countryId, point)
+    local surface = land.getSurfaceType(point)
+    object.destroy(unit)
+    if surface == land.SurfaceType.LAND or surface == land.SurfaceType.ROAD or surface == land.SurfaceType.RUNWAY then
+        csar.startMission(coalitionId, countryId, point)
+    end
+end
+
 local function onParachuteLanded(event)
     local unit = event.initiator
     local coalitionId, countryId = pilotIdentity(unit)
@@ -2887,11 +2910,9 @@ local function onParachuteLanded(event)
     if point == nil then
         return
     end
-    local surface = land.getSurfaceType(point)
-    object.destroy(unit)
-    if surface == land.SurfaceType.LAND or surface == land.SurfaceType.ROAD or surface == land.SurfaceType.RUNWAY then
-        csar.startMission(coalitionId, countryId, point)
-    end
+    -- a second later, outside the event handler: DCS can trip over world
+    -- changes made while it dispatches an event
+    tarmac.scheduler.after(1, replaceParachute, unit, coalitionId, countryId, point)
 end
 
 local function targetGroupName(target)
@@ -2971,7 +2992,9 @@ local function onUnitLost(event)
     if category == Unit.Category.GROUND_UNIT and cfg.losses.vehicleSmoke then
         local point = object.point(unit)
         if point then
-            trigger.action.effectSmokeBig(point, 1, 0.5)
+            -- a second later, outside the event handler: DCS can trip over
+            -- world changes made while it dispatches an event
+            tarmac.scheduler.after(1, trigger.action.effectSmokeBig, point, 1, 0.5)
         end
     end
 

@@ -4,12 +4,19 @@ industryFixture.start({ logistics = { tonsPerTruk = 1 } })
 
 local csar, tickets = industry.csar, industry.tickets
 
-local function parachute(name, typeName, coalitionId, x, z)
+local function landParachute(name, typeName, coalitionId, x, z)
     local group = coalition.addGroup(coalitionId == 1 and country.id.RUSSIA or country.id.USA, Group.Category.GROUND, {
         name = name .. " group", units = { { name = name, type = typeName, x = x, y = z } },
     })
     local pilot = group:getUnit(1)
     dcs.fire({ id = world.event.S_EVENT_LANDING_AFTER_EJECTION, initiator = pilot })
+    return pilot
+end
+
+-- lands a parachute and waits for the rescue, which starts a second later
+local function parachute(name, typeName, coalitionId, x, z)
+    local pilot = landParachute(name, typeName, coalitionId, x, z)
+    dcs.advance(1)
     return pilot
 end
 
@@ -230,6 +237,16 @@ test("without a free parking spot the helicopter keeps the cold start of its tem
     expect.equal(data.route.points[1].type, "TakeOffParking")
     expect.isNil(data.units[1].parking)
     expect.equal(Group.getByName("SAR BLUE #8").commands[1].id, "Start")
+end)
+
+test("the parachute is replaced a second after the event handler", function()
+    local pilot = landParachute("pilot 10", "pilot_f15_parachute", 2, 60000, 0)
+    expect.truthy(pilot:isExist(), "nothing changes inside the event handler")
+    expect.isNil(Group.getByName("SAR BLUE #9"))
+    dcs.advance(1)
+    expect.falsy(pilot:isExist())
+    expect.notNil(Group.getByName("DownedPilot-9"))
+    expect.notNil(Group.getByName("SAR BLUE #9"))
 end)
 
 test("players get the Industry menu, also in dynamic slots", function()

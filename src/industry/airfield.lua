@@ -16,6 +16,11 @@ local airfield = {}
 
 local cfg
 
+local function remove(unit, unitName)
+    log:info("%s shut down its engines, removed", unitName)
+    tarmac.tracker.destroyUnit(unit)
+end
+
 local function onEngineShutdown(event)
     local unit = event.initiator
     local unitName = object.name(unit)
@@ -29,8 +34,9 @@ local function onEngineShutdown(event)
     logistics.landed(unit)
     trigger.action.setUserFlag(unitName .. "_landed", true)
     if cfg.respawn.despawnLandedAI then
-        log:info("%s shut down its engines, removed", unitName)
-        tarmac.tracker.destroyUnit(unit)
+        -- a second later, outside the event handler: DCS can trip over world
+        -- changes made while it dispatches an event
+        tarmac.scheduler.after(1, remove, unit, unitName)
     end
 end
 

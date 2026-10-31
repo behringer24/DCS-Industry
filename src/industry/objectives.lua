@@ -124,7 +124,9 @@ function objectives.destroyed(name)
 
     tarmac.marks.remove(entry.markId)
     if entry.point then
-        trigger.action.effectSmokeBig(entry.point, 3, smokeDensity[entry.kind])
+        -- a second later, outside the event handler: DCS can trip over
+        -- world changes made while it dispatches an event
+        tarmac.scheduler.after(1, trigger.action.effectSmokeBig, entry.point, 3, smokeDensity[entry.kind])
     end
     trigger.action.setUserFlag(name .. "_destroyed", true)
     trigger.action.setUserFlag(side.name(entry.coalition) .. flagNames[entry.kind] .. "Destroyed", true)

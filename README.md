@@ -271,3 +271,7 @@ tarmac test
 `tarmac.json` expects the Tarmac checkout next to this repository (`../DCS-Tarmac`).
 
 Never edit `dist/industry.lua` by hand; change the modules and run `tarmac build`.
+
+Event handlers only read and record. Everything that changes the world — explosions, destroying or spawning
+objects, smoke — runs a second later through `tarmac.scheduler.after`, because DCS can trip over world changes
+made while it dispatches an event.

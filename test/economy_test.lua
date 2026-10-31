@@ -61,6 +61,8 @@ test("a destroyed storage loses its share of resources and tickets", function()
     expect.equal(dcs.flags["StorageRed-1-1_destroyed"], 1)
     expect.equal(dcs.flags["redStorageDestroyed"], 1)
     expect.isNil(dcs.marks[markId])
+    expect.equal(#dcs.smokes, 0, "the smoke follows outside the event handler")
+    dcs.advance(1)
     expect.equal(#dcs.smokes, 1)
 end)
 
