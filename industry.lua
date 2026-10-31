@@ -17,7 +17,7 @@ industry.config = {
     ticketsLow = 20,
 }
 
-industry.version = "v1.5.0"
+industry.version = "v1.5.1"
 industry.ressources = {[coalition.side.RED] = 200, [coalition.side.BLUE] = 200}
 industry.factories = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
 industry.storages = {[coalition.side.RED] = 1, [coalition.side.BLUE] = 1}
@@ -85,6 +85,17 @@ end
 
 industry.respawnQueue = {[coalition.side.RED] = industry.Queue(), [coalition.side.BLUE] = industry.Queue()}
 industry.respawnQueueFree = {[coalition.side.RED] = industry.Queue(), [coalition.side.BLUE] = industry.Queue()}
+
+function industry.safeGetName(object)
+    if (object == nil or object.getName == nil) then
+        return nil
+    end
+    local _ok, _name = pcall(function() return object:getName() end)
+    if (_ok) then
+        return _name
+    end
+    return nil
+end
 
 ---------------------------------------------------------
 -- Get group name of unit
@@ -618,7 +629,12 @@ function industry.eventHandler:onEvent(event)
             event.id == world.event.S_EVENT_EJECTION or
             event.id == world.event.S_EVENT_LANDING_AFTER_EJECTION) then
 
-        local _groupname = industry.getGroupNameByUnitName(_name)
+        -- DCS sometimes delivers KILL/UNIT_LOST without an initiator when
+        -- the shooter no longer exists at the time the event is dispatched
+        if (event.initiator == nil) then
+            env.info(string.format("Event id %s without initiator, ignored", tostring(event.id)), false)
+            return
+        end
 
         -- spawn SAR type heli mission if blueSAR or redSAR exists. has to have a waypoint 2 with the task landing as first task
         if (event.id == world.event.S_EVENT_LANDING_AFTER_EJECTION) then
@@ -724,7 +740,8 @@ function industry.eventHandler:onEvent(event)
 
         -- player killed SAR unit, reduce tickets
         if (event.id == world.event.S_EVENT_KILL and event.initiator.getPlayerName ~= nil and event.initiator:getPlayerName() ~= nil) then            
-            if (event.target and event.target:getDesc().category == Unit.Category.HELICOPTER and event.target.getGroup ~= nil) then
+            if (event.target and event.target.getDesc ~= nil and event.target:getDesc() and
+                    event.target:getDesc().category == Unit.Category.HELICOPTER and event.target.getGroup ~= nil) then
                 local _targetGroupName = event.target:getGroup():getName()
                 local _groupname = industry.getGroupNameByUnitName(event.initiator:getName()) or 'unknown group'
                 local _playerName = event.initiator:getPlayerName() or 'unknown player name'
@@ -770,12 +787,13 @@ function industry.eventHandler:onEvent(event)
 
         -- unit is lost / pre-destroyed
         if (event.id == world.event.S_EVENT_UNIT_LOST) then      
-            local _name = event.initiator:getName() or 'unknow name'
-            local _groupname = industry.getGroupNameByUnitName(event.initiator:getName()) or 'unknown group'
+            local _name = event.initiator:getName()
+            local _groupname = industry.getGroupNameByUnitName(_name) or 'unknown group'
 
             env.info(string.format("Handling event UNIT_LOST for Unit %s", _name), false)
 
-            if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.STRUCTURE) then
+            local _desc = event.initiator:getDesc()
+            if (_desc and _desc.category == Unit.Category.STRUCTURE) then
                 if (industry.mapMarkers[_name]) then
                     trigger.action.removeMark(industry.mapMarkers[_name])
                 end
@@ -835,7 +853,7 @@ function industry.eventHandler:onEvent(event)
             end
 
             -- vehicle destruction adds a fire and smoke
-            if (event.initiator:getDesc() and event.initiator:getDesc().category == Unit.Category.GROUND_UNIT) then
+            if (_desc and _desc.category == Unit.Category.GROUND_UNIT) then
                 local _pos = event.initiator:getPosition().p
                 if (_pos) then
                     trigger.action.effectSmokeBig(_pos, 1, 0.5)
@@ -844,7 +862,7 @@ function industry.eventHandler:onEvent(event)
             end
 
             -- player plane destruction reduces tickets
-            if (event.initiator.getDesc ~= nil and event.initiator:getDesc().category ~= Unit.Category.GROUND_UNIT and event.initiator:getDesc().category ~= Unit.Category.STRUCTURE and event.initiator.getPlayerName ~= nil and event.initiator:getPlayerName() ~= nil) then
+            if (_desc and _desc.category ~= Unit.Category.GROUND_UNIT and _desc.category ~= Unit.Category.STRUCTURE and event.initiator.getPlayerName ~= nil and event.initiator:getPlayerName() ~= nil) then
                 local _playerName = event.initiator:getPlayerName() or 'unknown playername'
                 env.info(string.format("Player %s (%s) killed. Reduce tickets of %s", _playerName, _name, industry.getCoalitionByGroupname(_groupname)))
                 industry.reduceTickets(industry.getCoalitionByGroupname(_groupname), 1)
