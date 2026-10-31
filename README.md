@@ -194,6 +194,19 @@ Every `respawn.deadCheckInterval` seconds Industry also looks for respawn groups
 
 Reset class flags such as `blueStorageDestroyed` in your triggers if you want to react to them more than once.
 
+### Ending the mission and mission goals
+When the countdown after the end of the war has run out, Industry sets `missionWinRed`, `missionWinBlue` or
+`missionWinNeutral` (draw) and loads the next mission of the server's mission list. Mission goals cannot be set
+from a script, so let the mission editor react to these flags:
+
+- **Triggers:** one trigger per flag, *ONCE*, condition *FLAG IS TRUE* (`missionWinRed`, ...), action
+  *END MISSION* with the winning coalition, plus sounds if you like.
+- **Mission goals** (for the debriefing result, campaigns and single player logbooks): a goal *Red Wins* for
+  RED, 100 points, condition *FLAG IS TRUE* `missionWinRed`, and the same for BLUE with `missionWinBlue`. A draw
+  needs no goal.
+
+Do not use Lua expressions on Industry internals in goals; they break when the internals change.
+
 ## Script API
 ```lua
 industry.setup(config)                   -- start Industry (once)
