@@ -80,7 +80,7 @@ the waypoint action itself, so the mission editor needs no script. The convoy th
 
 ### Air transports
 Aircraft groups whose name starts with `Transport` (e.g. `Transport-Red-1`) are transports. Send them to a
-friendly airbase with a landing waypoint. When a transport shuts down its engines it delivers
+friendly airbase with a landing waypoint. When a transport shuts down its engines on the ground it delivers
 `logistics.tonsPerTransport` tons (nothing if it landed at an enemy airbase), is removed and respawns for free.
 
 Groups with other names can get a role and an individual amount:
@@ -95,8 +95,10 @@ logistics = {
 ```
 
 ### Landed AI aircraft
-AI aircraft that shut down their engines are removed (`respawn.despawnLandedAI`), which frees the parking
-spot and lets respawn groups come back. The flag `<unit name>_landed` is set for your own triggers.
+AI aircraft that shut down their engines on the ground are removed (`respawn.despawnLandedAI`), which frees
+the parking spot and lets respawn groups come back. The flag `<unit name>_landed` is set for your own triggers.
+DCS also reports an engine shutdown when a damaged aircraft loses its engines in flight; such aircraft are
+left alone until they crash, so the shooter keeps the kill.
 
 ### Search and rescue
 Place one helicopter group named `TPL-SAR-Red` (rescues red pilots) and one named `TPL-SAR-Blue` (rescues blue
@@ -188,7 +190,7 @@ Every `respawn.deadCheckInterval` seconds Industry also looks for respawn groups
 | `<unit name>_destroyed`                | an objective was destroyed                       |
 | `red/blue` + `Factory/Laboratory/Storage/HQ/Secondary` + `Destroyed` (e.g. `blueStorageDestroyed`) | an objective of that kind was destroyed |
 | `ticketsLowRed`, `ticketsLowBlue`      | tickets fell to `tickets.low`                    |
-| `<unit name>_landed`                   | an AI aircraft shut down its engines             |
+| `<unit name>_landed`                   | an AI aircraft shut down its engines on the ground |
 | `<group name>_respawned`               | a group was respawned                            |
 | `missionWinRed`, `missionWinBlue`, `missionWinNeutral` | the countdown after the end of the war ran out |
 
