@@ -1,0 +1,21 @@
+{
+  "name": "industry",
+  "entry": "industry",
+  "sources": ["src", "../DCS-Tarmac/src"],
+  "output": "dist/industry.lua",
+  "banner": [
+    "Industry Wars - resources, respawns and tickets for DCS World missions",
+    "https://github.com/behringer24/DCS-Industry - GPL-3.0",
+    "Includes DCS Tarmac - https://github.com/behringer24/DCS-Tarmac"
+  ],
+  "test": {
+    "dir": "test",
+    "setup": [
+      "../DCS-Tarmac/testing/dcs_mock.lua",
+      "../DCS-Tarmac/testing/harness.lua",
+      "../DCS-Tarmac/testing/fixture.lua",
+      "test/fixtures.lua"
+    ],
+    "globals": ["industry", "tarmac"]
+  }
+}
