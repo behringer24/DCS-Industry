@@ -99,9 +99,11 @@ AI aircraft that shut down their engines are removed (`respawn.despawnLandedAI`)
 spot and lets respawn groups come back. The flag `<unit name>_landed` is set for your own triggers.
 
 ### Search and rescue
-Place one helicopter group per coalition whose name starts with `TPL-SAR` (e.g. `TPL-SAR-Blue`), with late
-activation and *uncontrolled* ticked. When a pilot (player or AI) lands with the parachute on land, the pilot
-becomes a soldier on the ground and a copy of the template flies to him, lands and picks him up. Scenery
+Place one helicopter group named `TPL-SAR-Red` (rescues red pilots) and one named `TPL-SAR-Blue` (rescues blue
+pilots) with *uncontrolled* ticked, usually parked at an airbase. They may belong to any coalition — put them on
+the neutral side so the rescue flights fly for neither side. The names can be changed in `csar.templates`.
+When a pilot (player or AI) lands with the parachute on land, the pilot becomes a soldier on the ground and a
+copy of the template flies to him, lands and picks him up. Scenery
 objects within `csar.clearRadius` meters of the landing point are removed. Players that shoot down a rescue
 helicopter cost their own coalition `csar.killTickets` tickets.
 
@@ -156,7 +158,7 @@ industry.setup({
     },
     csar = {
         enabled = true,
-        templatePrefix = "TPL-SAR",
+        templates = { red = "TPL-SAR-Red", blue = "TPL-SAR-Blue" },
         clearRadius = 50,
         killTickets = 1,
     },

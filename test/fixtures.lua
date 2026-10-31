@@ -2,8 +2,8 @@
 --
 -- red:  FactoryRed-1/2, LaboratoryRed-1, StorageRed-1/2, HQ Red, Secondary-1,
 --       RedCAP-1 (2 planes), Tanks-Red-1, Convoy-Red-1, Transport-Red-1, TPL-SAR-Red
--- blue: FactoryBlue-1, StorageBlue-1, BlueCAP-1, Convoy-Blue-1, TPL-SAR-Blue,
---       client slot BlueStrike-1
+-- blue: FactoryBlue-1, StorageBlue-1, BlueCAP-1, Convoy-Blue-1, client slot BlueStrike-1
+-- neutral: TPL-SAR-Blue (rescues blue pilots)
 
 industryFixture = {}
 
@@ -46,9 +46,10 @@ function industryFixture.mission()
         name = "Convoy-Blue-1", units = { { type = "M 818" }, { type = "M 818" } },
         route = { { x = 0, y = 0 }, { x = 5000, y = 0 } },
     })
-    fixture.group(m, "blue", US, "helicopter", {
-        name = "TPL-SAR-Blue", lateActivation = true, uncontrolled = true, units = { { type = "UH-1H" } },
-        route = { { x = 50, y = 50, type = "TakeOff", action = "From Parking Area" } },
+    -- rescue helicopters for blue pilots fly for the neutral coalition
+    fixture.group(m, "neutrals", country.id.UN_PEACEKEEPERS, "helicopter", {
+        name = "TPL-SAR-Blue", uncontrolled = true, units = { { type = "UH-60A" } },
+        route = { { x = 50, y = 50, type = "TakeOffParking", action = "From Parking Area" } },
     })
     fixture.client(m, "blue", US, "plane", { name = "BlueStrike-1" })
     return m

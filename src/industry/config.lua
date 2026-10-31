@@ -85,8 +85,9 @@ config.defaults = {
 
     csar = {
         enabled = true,
-        -- helicopter groups with this prefix are the rescue templates
-        templatePrefix = "TPL-SAR",
+        -- rescue helicopter template per coalition of the downed pilot; the
+        -- template itself may belong to any coalition (usually neutral)
+        templates = { red = "TPL-SAR-Red", blue = "TPL-SAR-Blue" },
         -- scenery objects removed around the landing point, in meters
         clearRadius = 50,
         -- tickets lost by the coalition of a player that shoots down a rescue helicopter

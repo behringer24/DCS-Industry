@@ -25,6 +25,8 @@ test("a landed parachute starts a rescue mission with a soldier on the ground", 
     local rescue = Group.getByName("SAR BLUE #1")
     expect.notNil(rescue)
     expect.truthy(csar.isRescueGroup("SAR BLUE #1"))
+    expect.equal(rescue:getCoalition(), 0, "the clone keeps the neutral coalition of its template")
+    expect.equal(rescue:getUnit(1):getTypeName(), "UH-60A")
     expect.equal(rescue.commands[1].id, "Start")
 
     local points = dcs.spawned[#dcs.spawned].data.route.points
@@ -47,6 +49,15 @@ test("a parachute landing in water does not start a rescue", function()
     dcs.surface = nil
     expect.falsy(pilot:isExist())
     expect.isNil(Group.getByName("SAR RED #2"))
+end)
+
+test("red pilots are rescued by the red template", function()
+    local pilot = parachute("pilot 3", "pilot_su27_parachute", 1, 3000, 3000)
+    dcs.fire({ id = world.event.S_EVENT_LANDING_AFTER_EJECTION, initiator = pilot })
+    local rescue = Group.getByName("SAR RED #2")
+    expect.notNil(rescue)
+    expect.equal(rescue:getUnit(1):getTypeName(), "Mi-8MT")
+    expect.equal(Group.getByName("DownedPilot-2"):getUnit(1):getTypeName(), "Infantry AK")
 end)
 
 test("shooting down a rescue helicopter costs the shooter's coalition", function()

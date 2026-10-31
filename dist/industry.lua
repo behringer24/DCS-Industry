@@ -1390,8 +1390,9 @@ config.defaults = {
 
     csar = {
         enabled = true,
-        -- helicopter groups with this prefix are the rescue templates
-        templatePrefix = "TPL-SAR",
+        -- rescue helicopter template per coalition of the downed pilot; the
+        -- template itself may belong to any coalition (usually neutral)
+        templates = { red = "TPL-SAR-Red", blue = "TPL-SAR-Blue" },
         -- scenery objects removed around the landing point, in meters
         clearRadius = 50,
         -- tickets lost by the coalition of a player that shoots down a rescue helicopter
@@ -2385,10 +2386,11 @@ __modules["industry.csar"] = function(...)
 --- Automatic combat search and rescue. When a pilot lands with the
 -- parachute on land, the pilot becomes a soldier on the ground and a
 -- rescue helicopter of the pilot's coalition is sent to pick him up.
--- Rescue helicopters are cloned from a template group per coalition whose
--- name starts with the configured prefix ("TPL-SAR..."); use late
--- activation and "uncontrolled" for the template. Shooting down a rescue
--- helicopter costs the shooter's coalition tickets.
+-- Rescue helicopters are clones of one template group per coalition of the
+-- downed pilot (default "TPL-SAR-Red" and "TPL-SAR-Blue"). The template
+-- keeps its own coalition, usually neutral, so the clone flies for neither
+-- side; tick "uncontrolled" for it. Shooting down a rescue helicopter costs
+-- the shooter's coalition tickets.
 
 local tarmac = require("tarmac")
 local tickets = require("industry.tickets")
@@ -2582,12 +2584,13 @@ function csar.setup(configuration)
         return
     end
     for _, coalitionId in ipairs(side.BOTH) do
-        local found = db.findGroups({
-            prefix = cfg.csar.templatePrefix, coalition = coalitionId, category = "helicopter", source = "mission",
-        })
-        if found[1] then
-            templates[coalitionId] = found[1].name
-            log:info("%s rescue template: %s", side.name(coalitionId), found[1].name)
+        local name = cfg.csar.templates[side.name(coalitionId)]
+        local record = name and db.group(name)
+        if record and record.category == "helicopter" then
+            templates[coalitionId] = name
+            log:info("rescue template for %s pilots: %s", side.name(coalitionId), name)
+        elseif name then
+            log:info("no rescue helicopter group %s, no rescue missions for %s pilots", name, side.name(coalitionId))
         end
     end
     tarmac.events.on("LANDING_AFTER_EJECTION", onParachuteLanded)
