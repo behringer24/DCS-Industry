@@ -1396,8 +1396,8 @@ config.defaults = {
         -- rescue helicopter template per coalition of the downed pilot; the
         -- template itself may belong to any coalition (usually neutral)
         templates = { red = "TPL-SAR-Red", blue = "TPL-SAR-Blue" },
-        -- rescue helicopters start with running engines (no cold start)
-        hotStart = true,
+        -- rescue helicopters start with running engines instead of a cold start
+        hotStart = false,
         -- flight altitude above ground in meters
         altitude = 150,
         -- seconds a landed rescue helicopter waits for the pilot at most

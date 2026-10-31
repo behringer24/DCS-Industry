@@ -41,7 +41,7 @@ local function logged(fragment)
     return false
 end
 
-test("a landed parachute sends a rescue helicopter with running engines from a free parking spot", function()
+test("a landed parachute sends a rescue helicopter from a free parking spot with a cold start", function()
     Airbase.getByName("Krymsk").parking = {
         { Term_Index = 1, Term_Type = 40, vTerminalPos = { x = 50, y = 0, z = 50 }, occupied = true },
         { Term_Index = 2, Term_Type = 68, vTerminalPos = { x = 60, y = 0, z = 50 } },
@@ -63,17 +63,16 @@ test("a landed parachute sends a rescue helicopter with running engines from a f
     expect.equal(csar.state("SAR BLUE #1"), "outbound")
     expect.equal(rescue:getCoalition(), 0, "the clone keeps the neutral coalition of its template")
     expect.equal(rescue:getUnit(1):getTypeName(), "UH-60A")
-    expect.same(rescue.commands, {}, "a hot start needs no start command")
+    expect.equal(rescue.commands[1].id, "Start", "the uncontrolled template is started")
 
     local data = dcs.spawned[#dcs.spawned].data
-    expect.equal(data.uncontrolled, false)
+    expect.equal(data.uncontrolled, true)
     expect.equal(data.units[1].parking, 3, "nearest free spot a helicopter can use")
     expect.equal(data.units[1].x, 120)
     expect.equal(data.units[1].y, 80)
 
     local points = data.route.points
-    expect.equal(points[1].type, "TakeOffParkingHot")
-    expect.equal(points[1].action, "From Parking Area Hot")
+    expect.equal(points[1].type, "TakeOffParking", "taxis to the runway like its template")
     expect.equal(points[1].airdromeId, 1)
     expect.equal(points[2].x, 1020)
     expect.equal(points[2].y, 2020)
@@ -211,14 +210,15 @@ test("red pilots are rescued by the red template", function()
     expect.equal(data.route.points[2].task.params.tasks[1].id, "Land")
 end)
 
-test("a template without hot start keeps its cold start", function()
-    industry.config.csar.hotStart = false
-    parachute("pilot 8", "pilot_f15_parachute", 2, 40000, 0)
+test("with csar.hotStart the helicopter starts with running engines", function()
     industry.config.csar.hotStart = true
+    parachute("pilot 8", "pilot_f15_parachute", 2, 40000, 0)
+    industry.config.csar.hotStart = false
     local data = dcs.spawned[#dcs.spawned].data
-    expect.equal(data.route.points[1].type, "TakeOffParking")
-    expect.equal(data.uncontrolled, true)
-    expect.equal(Group.getByName("SAR BLUE #7").commands[1].id, "Start")
+    expect.equal(data.route.points[1].type, "TakeOffParkingHot")
+    expect.equal(data.route.points[1].action, "From Parking Area Hot")
+    expect.equal(data.uncontrolled, false)
+    expect.same(Group.getByName("SAR BLUE #7").commands, {}, "a hot start needs no start command")
 end)
 
 test("without a free parking spot the helicopter keeps the cold start of its template", function()

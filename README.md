@@ -116,9 +116,9 @@ the neutral side so the rescue flights fly for neither side. The names can be ch
 
 When a pilot (player or AI) lands with the parachute on land, the pilot becomes a soldier on the ground and a
 copy of the template is sent:
-1. **Start:** At an airbase the helicopter takes the free helicopter parking spot closest to the template and,
-   with `csar.hotStart`, starts with running engines. Without a free spot it shares the template's spot and
-   keeps the template's cold start.
+1. **Start:** At an airbase the helicopter takes the free helicopter parking spot closest to the template (without
+   a free spot it shares the template's spot). Like its template it makes a cold start and taxis to the runway;
+   with `csar.hotStart` it starts with running engines.
 2. **Flight:** It flies `csar.altitude` meters above the ground to the pilot and lands where its AI finds a
    landing site.
 3. **Boarding:** If it landed up to `csar.maxWalkDistance` meters away, the pilot walks over and boards. A
@@ -187,7 +187,7 @@ industry.setup({
     csar = {
         enabled = true,
         templates = { red = "TPL-SAR-Red", blue = "TPL-SAR-Blue" },
-        hotStart = true,      -- start with running engines from a free parking spot
+        hotStart = false,     -- true: start with running engines instead of a cold start
         altitude = 150,       -- meters above the ground
         waitTime = 1200,      -- seconds a landed helicopter waits for the pilot at most
         maxWalkDistance = 800,
