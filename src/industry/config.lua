@@ -91,8 +91,20 @@ config.defaults = {
         -- rescue helicopter template per coalition of the downed pilot; the
         -- template itself may belong to any coalition (usually neutral)
         templates = { red = "TPL-SAR-Red", blue = "TPL-SAR-Blue" },
-        -- scenery objects removed around the landing point, in meters
-        clearRadius = 50,
+        -- rescue helicopters start with running engines (no cold start)
+        hotStart = true,
+        -- flight altitude above ground in meters
+        altitude = 150,
+        -- seconds a landed rescue helicopter waits for the pilot at most
+        waitTime = 1200,
+        -- the pilot walks to a helicopter that landed up to this many meters away
+        maxWalkDistance = 800,
+        -- landings near the pilot before the rescue is given up
+        landingAttempts = 2,
+        -- seconds after which an unfinished rescue helicopter is removed
+        timeout = 7200,
+        -- scenery objects removed around the pilot, in meters (0 = none)
+        clearRadius = 0,
         -- tickets lost by the coalition of a player that shoots down a rescue helicopter
         killTickets = 1,
     },

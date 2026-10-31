@@ -113,10 +113,26 @@ touched. Switch it off with `respawn.removeStranded = false`.
 Place one helicopter group named `TPL-SAR-Red` (rescues red pilots) and one named `TPL-SAR-Blue` (rescues blue
 pilots) with *uncontrolled* ticked, usually parked at an airbase. They may belong to any coalition — put them on
 the neutral side so the rescue flights fly for neither side. The names can be changed in `csar.templates`.
+
 When a pilot (player or AI) lands with the parachute on land, the pilot becomes a soldier on the ground and a
-copy of the template flies to him, lands and picks him up. Scenery
-objects within `csar.clearRadius` meters of the landing point are removed. Players that shoot down a rescue
-helicopter cost their own coalition `csar.killTickets` tickets.
+copy of the template is sent:
+1. **Start:** At an airbase the helicopter takes the free helicopter parking spot closest to the template and,
+   with `csar.hotStart`, starts with running engines. Without a free spot it shares the template's spot and
+   keeps the template's cold start.
+2. **Flight:** It flies `csar.altitude` meters above the ground to the pilot and lands where its AI finds a
+   landing site.
+3. **Boarding:** If it landed up to `csar.maxWalkDistance` meters away, the pilot walks over and boards. A
+   helicopter that landed farther away takes off and lands at the pilot again, up to `csar.landingAttempts`
+   landings.
+4. **Return:** It flies back to the template's airbase (or start position), lands and is removed.
+
+The rescue fails, and the helicopter flies home, when no landing is close enough, when the pilot does not reach the
+helicopter in time or when the pilot is killed. The soldier of a failed rescue stays where he is. A rescue
+helicopter that has not finished after `csar.timeout` seconds is removed. All steps are announced to the pilot's
+coalition and written to `dcs.log`.
+
+Scenery objects within `csar.clearRadius` meters of the pilot are removed (off by default; forests are not
+scenery objects). Players that shoot down a rescue helicopter cost their own coalition `csar.killTickets` tickets.
 
 ### F10 menu
 Every player group gets *Industry → Get current statistics*, also in dynamic slots.
@@ -171,7 +187,13 @@ industry.setup({
     csar = {
         enabled = true,
         templates = { red = "TPL-SAR-Red", blue = "TPL-SAR-Blue" },
-        clearRadius = 50,
+        hotStart = true,      -- start with running engines from a free parking spot
+        altitude = 150,       -- meters above the ground
+        waitTime = 1200,      -- seconds a landed helicopter waits for the pilot at most
+        maxWalkDistance = 800,
+        landingAttempts = 2,
+        timeout = 7200,       -- seconds until an unfinished rescue helicopter is removed
+        clearRadius = 0,
         killTickets = 1,
     },
 })

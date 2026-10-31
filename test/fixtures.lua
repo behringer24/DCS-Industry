@@ -49,7 +49,7 @@ function industryFixture.mission()
     -- rescue helicopters for blue pilots fly for the neutral coalition
     fixture.group(m, "neutrals", country.id.UN_PEACEKEEPERS, "helicopter", {
         name = "TPL-SAR-Blue", uncontrolled = true, units = { { type = "UH-60A" } },
-        route = { { x = 50, y = 50, type = "TakeOffParking", action = "From Parking Area" } },
+        route = { { x = 50, y = 50, type = "TakeOffParking", action = "From Parking Area", airdromeId = 1 } },
     })
     fixture.client(m, "blue", US, "plane", { name = "BlueStrike-1" })
     return m
