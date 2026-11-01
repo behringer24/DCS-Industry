@@ -111,3 +111,8 @@ test("players are never removed on engine shutdown", function()
     expect.truthy(player:isExist())
     expect.isNil(dcs.flags["BlueStrike-1-1_landed"])
 end)
+
+test("nothing logged an error", function()
+    local errors = industryFixture.errors()
+    expect.equal(#errors, 0, table.concat(errors, " | "))
+end)

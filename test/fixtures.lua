@@ -70,6 +70,27 @@ function industryFixture.config(overrides)
     return base
 end
 
+-- Log lines written with the error level (failed handlers, tasks, spawns).
+function industryFixture.errors()
+    local found = {}
+    for _, line in ipairs(dcs.logs) do
+        if line:find(" ERROR ", 1, true) then
+            found[#found + 1] = line
+        end
+    end
+    return found
+end
+
+-- True if a log line contains the fragment.
+function industryFixture.logged(fragment)
+    for _, line in ipairs(dcs.logs) do
+        if line:find(fragment, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
 -- Starts the fixture mission, loads the bundle and calls industry.setup.
 function industryFixture.start(overrides, prepare)
     local m = industryFixture.mission()

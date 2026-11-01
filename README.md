@@ -1,8 +1,9 @@
 # DCS-Industry
 Industry Wars script for DCS World — resources, respawns and tickets.
 
-> **Version 2 is in development** on this branch. It no longer needs MIST and is configured with one
-> Lua table. The last 1.x release is tagged `v1.5.1`; its documentation is in the README of that tag.
+> **Version 2.1 is in development** on this branch. Version 2 no longer needs MIST and is configured with
+> one Lua table; 2.1 adds reconnaissance and the HQ menu. The last 1.x release is tagged `v1.5.1`; its
+> documentation is in the README of that tag.
 
 ## Description
 Industry adds a resource management and respawn system to DCS missions. All AI units need resources to
@@ -21,9 +22,12 @@ Discuss on Discord: https://discord.gg/bTzjqZKa
 - Deliveries by convoys (no script in the mission editor needed) and air transports (no trigger needed)
 - Respawn of AI groups for resources, with a strict queue so expensive groups are not starved
 - Tickets that limit the mission time and decide the winner
-- Strategic objectives (factories, laboratories, storages, HQs, secondary targets) marked on the F10 map
+- Strategic objectives (factories, laboratories, storages, HQs, secondary targets)
+- Reconnaissance: enemy objectives and air defence sites appear on the F10 map only after AI units or players
+  spotted them and reported them to the own HQ — depending on distance, terrain, daylight and weather. Without
+  HQ a coalition is blind
 - Automatic combat search and rescue missions for pilots that landed with the parachute
-- F10 statistics menu for every player, including dynamic slots
+- F10 HQ menu for every player, including dynamic slots: send recon reports, request the supply status
 - Robust against units that disappear without events (emergency landings, despawned wrecks) and against
   damaged aircraft that are stranded on the ground
 
@@ -51,7 +55,7 @@ Static objects become objectives when their **unit name starts with** one of the
 | `Factory`    | produces `production.perFactory` tons per cycle          | 10                                   |
 | `Laboratory` | adds `production.labBoost` percent of factory production | 5                                    |
 | `Storage`    | holds `production.storageCapacity` tons                  | its share of the remaining tickets   |
-| `HQ`         | —                                                        | half of the remaining tickets        |
+| `HQ`         | receives recon reports; without HQ a coalition is blind  | half of the remaining tickets        |
 | `Secondary`  | optional target                                          | 1                                    |
 
 The prefixes are matched at the start of the name only (`HQ Blue` is an HQ, `BlueHQ` is not) and can be
@@ -134,12 +138,57 @@ coalition and written to `dcs.log`.
 Scenery objects within `csar.clearRadius` meters of the pilot are removed (off by default; forests are not
 scenery objects). Players that shoot down a rescue helicopter cost their own coalition `csar.killTickets` tickets.
 
+### Reconnaissance and the HQ
+With `intel.enabled` (the default) no enemy target is on the map at the start. Targets are all objectives and
+the air defence sites: ground groups with a SAM or early warning radar (DCS attributes *SAM SR*, *SAM TR*, *EWR*)
+or with at least half air defence units (*Air Defence*, *EWR*), see `intel.airDefenceRadars` and
+`intel.airDefenceShare`. A convoy or platoon with a single escort SAM is no site; `dcs.log` lists every group
+that was checked. A target appears on the F10 map of a coalition only after it was spotted and the report
+reached the coalition's HQ:
+
+- **AI units** (`intel.aiRecon`) report what they see right away. Reconnaissance aircraft — groups with the task
+  *Reconnaissance* in the mission editor and the types in `intel.reconTypes` — see farther and from higher up.
+- **Players** get a message when they spot something (*Recon: Factory spotted, bearing 312 for 8 km*) and a mark
+  that only their group sees. *F10 → HQ → Send recon report* sends everything spotted since the last report.
+  What is not sent is lost with the aircraft, on ejection or when the player leaves the slot.
+- **Without HQ a coalition is blind.** When its last HQ objective is destroyed, all its reports and marks
+  disappear, nobody spots anything any more and the HQ menu is gone. A coalition without any HQ objective in
+  the mission does its reconnaissance without HQ.
+
+Whether a target is spotted depends on:
+
+| Factor   | Effect |
+|----------|--------|
+| Distance | range per target kind (`intel.ranges`): factory 10 km, storage 8 km, laboratory, HQ and air defence 6 km, secondary 5 km |
+| Observer | ground units and ships ×0.6, aircraft ×1, reconnaissance aircraft ×2.5 (`intel.observers`) |
+| Height   | aircraft more than `intel.maxAltitude` (4000 m) above the ground see nothing, reconnaissance aircraft up to `intel.reconAltitude` (12000 m) |
+| Light    | twilight ×0.5, night ×0.2, types in `intel.nightVisionTypes` ×0.6. The sun is computed from the mission date, time and map |
+| Weather  | never beyond the mission visibility; fog and dust limit points inside them; overcast clouds between observer and target block the view, broken clouds ×0.5 |
+| Terrain  | the line of sight must be free (hills and mountains; trees and buildings do not block it) |
+
+Reported air defence sites get a red threat circle. Its radius is the missile range of the launchers, else
+`intel.threatRadius` by DCS attribute (`intel.threatRings`). Destroyed targets stay on the map, marked
+destroyed with a grey circle. A site that is rebuilt (respawn) has to be found again.
+
+`dcs.log` tells with the prefix `[industry.intel]` who spotted what with the full range calculation, near misses
+(terrain, too high, clouds, just out of range; `intel.verbose`), reports, lost recon packages and a summary every
+`intel.summaryInterval` seconds — so the parameters can be tuned with the log of a real mission.
+
+Without reconnaissance (`intel.enabled = false`) all enemy objectives are marked from the start
+(`objectives.markers`), as in 2.0.
+
 ### F10 menu
-Every player group gets *Industry → Get current statistics*, also in dynamic slots.
+Every red and blue player group gets the menu *HQ*, also in dynamic slots, with radio calls to the own HQ:
+- *Send recon report* — the targets spotted since the last report (only with reconnaissance).
+- *Request supply status* — stock, storage capacity and the operational factories, laboratories and storages of
+  the own coalition.
+
+The menu disappears when the coalition's HQ is destroyed.
 
 ## Configuration
 `industry.setup()` takes one table. Everything you leave out uses these defaults. Unknown keys are reported
-in `dcs.log`.
+in `dcs.log`. Type and attribute lists are sets: add an entry with `["Tornado IDS"] = true`, switch off a
+default one with `= false`.
 
 ```lua
 industry.setup({
@@ -178,7 +227,28 @@ industry.setup({
         prefixes = { factory = "Factory", laboratory = "Laboratory", storage = "Storage",
                      hq = "HQ", secondary = "Secondary" },
         ticketCosts = { factory = 10, laboratory = 5, secondary = 1, hqFraction = 0.5 },
-        markers = true,
+        markers = true,       -- mark all enemy objectives from the start (only without reconnaissance)
+    },
+    intel = {
+        enabled = true,       -- false: no reconnaissance, objectives.markers applies
+        aiRecon = true,       -- AI units report what they see
+        interval = 10,        -- seconds between two checks
+        ranges = { factory = 10000, laboratory = 6000, storage = 8000, hq = 6000, secondary = 5000,
+                   airDefence = 6000 },
+        observers = { ground = 0.6, aircraft = 1, recon = 2.5 },
+        maxAltitude = 4000,   -- meters above the ground
+        reconAltitude = 12000,
+        reconTypes = { ["Su-24MR"] = true, ["MiG-25RBT"] = true },
+        light = { day = 1, twilight = 0.5, night = 0.2, nightVision = 0.6 },
+        nightVisionTypes = { ["AH-64D_BLK_II"] = true, --[[ ... see src/industry/config.lua ]] },
+        brokenClouds = 0.5,
+        airDefenceAttributes = { ["Air Defence"] = true, ["EWR"] = true },
+        airDefenceRadars = { ["SAM SR"] = true, ["SAM TR"] = true, ["EWR"] = true },
+        airDefenceShare = 0.5, -- share of air defence units that makes a group without radar a site
+        threatRings = true,
+        threatRadius = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },
+        verbose = true,       -- log near misses
+        summaryInterval = 600,
     },
     losses = {
         playerTickets = 1,    -- tickets per destroyed player aircraft

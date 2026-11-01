@@ -1,6 +1,7 @@
 -- production, storages and objectives
 
-industryFixture.start()
+-- without reconnaissance all enemy objectives are marked from the start
+industryFixture.start({ intel = { enabled = false } })
 
 local economy, objectives, tickets = industry.economy, industry.objectives, industry.tickets
 
@@ -26,6 +27,11 @@ test("enemy objectives are marked with unique ids", function()
     expect.equal(red, 7, "red objectives are shown to blue")
     expect.equal(blue, 2, "blue objectives are shown to red")
     expect.equal(#dcs.markErrors, 0)
+end)
+
+test("without reconnaissance the HQ menu has no recon report", function()
+    local groupId = dcs.spawnPlayer("BlueStrike-1-1", "Hornet"):getID()
+    expect.same(dcs.menuPaths("group", groupId), { "HQ", "HQ/Request supply status" })
 end)
 
 test("production adds factory output and laboratory bonus", function()
@@ -104,4 +110,9 @@ test("destroying the last storage empties the coalition", function()
     expect.equal(#dcs.findMessages("All red storages have been destroyed"), 1)
     dcs.advance(300)
     expect.equal(economy.resources(1), 0, "production cannot be stored without storages")
+end)
+
+test("nothing logged an error", function()
+    local errors = industryFixture.errors()
+    expect.equal(#errors, 0, table.concat(errors, " | "))
 end)

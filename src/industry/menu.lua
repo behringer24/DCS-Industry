@@ -1,33 +1,50 @@
---- F10 menu "Industry" for every player group, including dynamic slots.
+--- F10 menu "HQ" for every player group, including dynamic slots: radio
+-- calls to the own HQ. A coalition whose HQ was destroyed loses the menu.
 
 local tarmac = require("tarmac")
 local economy = require("industry.economy")
-local production = require("industry.production")
-local tickets = require("industry.tickets")
+local objectives = require("industry.objectives")
+local intel = require("industry.intel")
+
+local side = tarmac.side
 
 local menu = {}
 
---- Text of the statistics message.
-function menu.statistics()
-    local blue, red = production.report(2), production.report(1)
-    return string.format(
-        "BLUE Fact: %2d   Labs: %2d    Stor: %2d    Res: %4d\n" ..
-        "RED   Fact: %2d   Labs: %2d    Stor: %2d    Res: %4d\n" ..
-        "Tickets: BLUE %d    RED %d",
-        blue.factories, blue.labs, blue.storages, economy.resources(2),
-        red.factories, red.labs, red.storages, economy.resources(1),
-        tickets.get(2), tickets.get(1))
+local cfg
+local entry
+
+--- Answer of the HQ to a supply status request: own coalition only.
+function menu.supplyStatus(coalitionId)
+    return string.format("HQ: Supply status\nStock: %d t of %d t storage capacity\n"
+        .. "Operational: %d factories, %d laboratories, %d storages",
+        economy.resources(coalitionId), economy.capacity(coalitionId), objectives.count(coalitionId, "factory"),
+        objectives.count(coalitionId, "laboratory"), objectives.count(coalitionId, "storage"))
 end
 
-local function showStatistics(groupId)
-    trigger.action.outTextForGroup(groupId, menu.statistics(), 20)
+local function requestSupplyStatus(player)
+    trigger.action.outTextForGroup(player.groupId, menu.supplyStatus(player.coalition), 20)
 end
 
-function menu.setup()
-    tarmac.menu.forPlayers(function(player)
-        local root = missionCommands.addSubMenuForGroup(player.groupId, "Industry")
-        missionCommands.addCommandForGroup(player.groupId, "Get current statistics", root, showStatistics, player.groupId)
+local function sendReport(player)
+    intel.report(player.groupName, player.groupId, player.coalition)
+end
+
+function menu.setup(configuration)
+    cfg = configuration
+    entry = tarmac.menu.forPlayers(function(player)
+        local coalitionId = player.coalition
+        if (coalitionId ~= side.RED and coalitionId ~= side.BLUE) or not intel.hqAlive(coalitionId) then
+            return nil
+        end
+        local root = missionCommands.addSubMenuForGroup(player.groupId, "HQ")
+        if cfg.intel.enabled then
+            missionCommands.addCommandForGroup(player.groupId, "Send recon report", root, sendReport, player)
+        end
+        missionCommands.addCommandForGroup(player.groupId, "Request supply status", root, requestSupplyStatus, player)
         return root
+    end)
+    tarmac.events.on("industry.hqLost", function()
+        tarmac.menu.rebuild(entry)
     end)
 end
 

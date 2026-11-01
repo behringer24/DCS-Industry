@@ -78,3 +78,8 @@ test("an aircraft that survives its removal is blown up at the next check", func
     expect.equal(dcs.explosions[#dcs.explosions].power, 400)
     expect.truthy(logged("RedCAP-1-2 was not removed, blown up"))
 end)
+
+test("nothing logged an error", function()
+    local errors = industryFixture.errors()
+    expect.equal(#errors, 0, table.concat(errors, " | "))
+end)

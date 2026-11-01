@@ -25,13 +25,14 @@ local logistics = require("industry.logistics")
 local airfield = require("industry.airfield")
 local csar = require("industry.csar")
 local losses = require("industry.losses")
+local intel = require("industry.intel")
 local menu = require("industry.menu")
 local stranded = require("industry.stranded")
 
 local log = tarmac.log.new("industry")
 
 local industry = {
-    version = "2.0.0-dev",
+    version = "2.1.0",
     tarmac = tarmac,
     tickets = tickets,
     economy = economy,
@@ -40,6 +41,7 @@ local industry = {
     respawn = respawn,
     logistics = logistics,
     csar = csar,
+    intel = intel,
     menu = menu,
     stranded = stranded,
 }
@@ -70,7 +72,8 @@ function industry.setup(given)
     airfield.setup(cfg)
     csar.setup(cfg)
     losses.setup(cfg)
-    menu.setup()
+    intel.setup(cfg)
+    menu.setup(cfg)
 
     log:info("Industry %s started (Tarmac %s)", industry.version, tarmac.version)
     return industry

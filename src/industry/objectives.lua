@@ -134,7 +134,18 @@ function objectives.destroyed(name)
         trigger.action.outText(string.format(destroyedMessages[entry.kind], side.name(entry.coalition)), 10)
     end
     penalty(entry)
+    tarmac.events.emit("industry.objectiveDestroyed", { name = name, kind = entry.kind, coalition = entry.coalition })
     return true
+end
+
+--- All objectives, sorted by name.
+function objectives.all()
+    local list = {}
+    for _, entry in pairs(registry) do
+        list[#list + 1] = entry
+    end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    return list
 end
 
 local function onLoss(event)
@@ -159,7 +170,8 @@ function objectives.setup(configuration)
                     point = object.point(static),
                     destroyed = false,
                 }
-                if cfg.objectives.markers and entry.point then
+                -- with reconnaissance, objectives appear on the map once they are reported
+                if cfg.objectives.markers and not cfg.intel.enabled and entry.point then
                     entry.markId = tarmac.marks.toCoalition(side.enemy(coalitionId),
                         string.format(markTexts[kind], side.name(coalitionId)), entry.point)
                 end

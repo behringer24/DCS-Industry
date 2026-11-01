@@ -74,3 +74,8 @@ test("a destroyed ground vehicle starts burning a second later", function()
     expect.equal(#dcs.smokes, 1)
     expect.equal(dcs.smokes[1].preset, 1)
 end)
+
+test("nothing logged an error", function()
+    local errors = industryFixture.errors()
+    expect.equal(#errors, 0, table.concat(errors, " | "))
+end)

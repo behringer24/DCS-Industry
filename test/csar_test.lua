@@ -249,18 +249,20 @@ test("the parachute is replaced a second after the event handler", function()
     expect.notNil(Group.getByName("SAR BLUE #9"))
 end)
 
-test("players get the Industry menu, also in dynamic slots", function()
+test("players get the HQ menu, also in dynamic slots", function()
     local slot = dcs.spawnPlayer(nil, "Viper", {
         name = "Dynamic Viper #1", category = "plane",
         units = { { name = "Dynamic Viper #1-1", type = "F-16C_50", skill = "Client" } },
     }, country.id.USA)
     local groupId = slot:getID()
-    expect.same(dcs.menuPaths("group", groupId), { "Industry", "Industry/Get current statistics" })
-    dcs.selectMenu("group", groupId, "Industry/Get current statistics")
+    expect.same(dcs.menuPaths("group", groupId), { "HQ", "HQ/Send recon report", "HQ/Request supply status" })
+    dcs.selectMenu("group", groupId, "HQ/Request supply status")
     local message = dcs.messages[#dcs.messages]
     expect.equal(message.to, "group")
     expect.equal(message.target, groupId)
-    expect.contains(message.text, "Tickets: BLUE")
+    expect.contains(message.text, "HQ: Supply status")
+    expect.contains(message.text, "Operational: 1 factories")
+    expect.falsy(message.text:find("Tickets", 1, true), "players hear nothing about tickets")
 end)
 
 test("unknown configuration keys are reported", function()
@@ -270,4 +272,9 @@ end)
 test("a second setup call is ignored", function()
     industry.setup({ startResources = 1 })
     expect.equal(industry.config.startResources, 500)
+end)
+
+test("nothing logged an error", function()
+    local errors = industryFixture.errors()
+    expect.equal(#errors, 0, table.concat(errors, " | "))
 end)

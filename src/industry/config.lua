@@ -75,8 +75,56 @@ config.defaults = {
         -- tickets lost when an objective is destroyed; storages cost a share
         -- of the remaining tickets, an HQ the given fraction of them
         ticketCosts = { factory = 10, laboratory = 5, secondary = 1, hqFraction = 0.5 },
-        -- mark enemy objectives on the F10 map
+        -- mark all enemy objectives on the F10 map from the start (only
+        -- without reconnaissance, see intel.enabled)
         markers = true,
+    },
+
+    intel = {
+        -- reconnaissance: enemy targets appear on the map only after they were
+        -- spotted and reported to the own HQ; without HQ a coalition is blind
+        enabled = true,
+        -- AI units report what they see to their HQ by themselves
+        aiRecon = true,
+        -- seconds between two checks of what every observer can see
+        interval = 10,
+        -- meters from which a target of this kind can be spotted in daylight
+        ranges = {
+            factory = 10000, laboratory = 6000, storage = 8000, hq = 6000, secondary = 5000, airDefence = 6000,
+        },
+        -- range factor per observer: ground units and ships, aircraft, and
+        -- reconnaissance aircraft (group task "Reconnaissance" or reconTypes)
+        observers = { ground = 0.6, aircraft = 1, recon = 2.5 },
+        -- aircraft higher than this above the ground in meters see nothing
+        maxAltitude = 4000,
+        reconAltitude = 12000,
+        -- aircraft types that count as reconnaissance aircraft
+        reconTypes = { ["Su-24MR"] = true, ["MiG-25RBT"] = true },
+        -- range factor for the light; nightVision applies to nightVisionTypes
+        -- at twilight and at night
+        light = { day = 1, twilight = 0.5, night = 0.2, nightVision = 0.6 },
+        nightVisionTypes = {
+            ["AH-64D_BLK_II"] = true, ["A-10C"] = true, ["A-10C_2"] = true, ["F-16C_50"] = true,
+            ["FA-18C_hornet"] = true, ["F-15ESE"] = true, ["AV8BNA"] = true, ["Ka-50_3"] = true,
+            ["Mi-24P"] = true, ["Su-24MR"] = true,
+        },
+        -- range factor when the line of sight passes broken clouds
+        -- (overcast clouds block it, scattered clouds do not matter)
+        brokenClouds = 0.5,
+        -- ground units with one of these attributes are air defence units; a
+        -- group is an air defence site when it has a radar (airDefenceRadars)
+        -- or at least airDefenceShare of its units are air defence units
+        airDefenceAttributes = { ["Air Defence"] = true, ["EWR"] = true },
+        airDefenceRadars = { ["SAM SR"] = true, ["SAM TR"] = true, ["EWR"] = true },
+        airDefenceShare = 0.5,
+        -- threat circles around reported air defence sites
+        threatRings = true,
+        -- threat radius in meters by attribute when the missiles do not tell
+        threatRadius = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },
+        -- log near misses (terrain, height, clouds, slightly out of range)
+        verbose = true,
+        -- seconds between two summaries in dcs.log
+        summaryInterval = 600,
     },
 
     losses = {
@@ -114,6 +162,11 @@ config.defaults = {
 local openTables = {
     ["respawn.groups"] = true,
     ["logistics.groups"] = true,
+    ["intel.reconTypes"] = true,
+    ["intel.nightVisionTypes"] = true,
+    ["intel.airDefenceAttributes"] = true,
+    ["intel.airDefenceRadars"] = true,
+    ["intel.threatRadius"] = true,
 }
 
 local function checkKeys(given, defaults, path)

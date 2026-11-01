@@ -93,3 +93,9 @@ test("no explosion when the aircraft is gone before it follows the ejection", fu
     dcs.advance(1)
     expect.equal(#dcs.explosions, 1)
 end)
+
+test("nothing logged an error but the unknown respawn group", function()
+    local errors = industryFixture.errors()
+    expect.equal(#errors, 1, table.concat(errors, " | "))
+    expect.contains(errors[1], "respawn group Does-Not-Exist does not exist in the mission")
+end)
