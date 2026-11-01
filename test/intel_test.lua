@@ -5,10 +5,11 @@ dcs.typeAttributes["SA-11 Buk SR 9S18M1"] = { ["Air Defence"] = true, ["MR SAM"]
 dcs.typeAttributes["1L13 EWR"] = { ["Air Defence"] = true, ["EWR"] = true }
 dcs.typeAttributes["ZSU-23-4 Shilka"] = { ["Air Defence"] = true, ["AAA"] = true }
 dcs.typeAttributes["Dog Ear radar"] = { ["Air Defence"] = true, ["SAM SR"] = true }
-dcs.typeAttributes["2S6 Tunguska"] = { ["Air Defence"] = true, ["SR SAM"] = true }
-dcs.typeAmmo["SA-11 Buk LN 9A310M1"] = { { count = 4, desc = { typeName = "9M38M1", rangeMaxAltMax = 35000 } } }
+-- a modded type that is missing in intel.threatRanges
+dcs.typeAttributes["SHORAD Mod"] = { ["Air Defence"] = true, ["SR SAM"] = true }
 
-industryFixture.start({ intel = { aiRecon = false } }, function(m)
+-- the mission changes the threat range of one type, the others stay
+industryFixture.start({ intel = { aiRecon = false, threatRanges = { ["SA-11 Buk LN 9A310M1"] = 35000 } } }, function(m)
     local RU, US = country.id.RUSSIA, country.id.USA
     fixture.static(m, "blue", US, { name = "HQ Blue Command Center", x = -90000, y = 0 })
     fixture.static(m, "red", RU, { name = "FactoryRed-9", x = 40000, y = 5000 })
@@ -20,7 +21,7 @@ industryFixture.start({ intel = { aiRecon = false } }, function(m)
     fixture.group(m, "red", RU, "vehicle", { name = "EWR-Red-1", x = 70000, y = 70000, units = { { type = "1L13 EWR" } } })
     fixture.group(m, "red", RU, "vehicle", {
         name = "Shorad-Red-1", x = 95000, y = 95000,
-        units = { { type = "Dog Ear radar" }, { type = "2S6 Tunguska" }, { type = "Ural-375" }, { type = "Ural-375" },
+        units = { { type = "Dog Ear radar" }, { type = "SHORAD Mod" }, { type = "Ural-375" }, { type = "Ural-375" },
                   { type = "Ural-375" } },
     })
     fixture.group(m, "red", RU, "vehicle", {
@@ -54,7 +55,8 @@ end
 test("air defence groups and objectives become targets", function()
     local sam = intel.targets()["group:SAM-Red-1"]
     expect.equal(sam.label, "SAM site (medium range)")
-    expect.equal(sam.threat, 35000, "from the missile range")
+    expect.equal(sam.threat, 35000, "the mission's threat range for the type")
+    expect.equal(industry.config.intel.threatRanges["NASAMS_LN_C"], 15000, "the other types keep their default")
     expect.equal(intel.targets()["group:EWR-Red-1"].label, "Early warning radar")
     expect.isNil(intel.targets()["group:EWR-Red-1"].threat)
     expect.equal(intel.targets()["objective:FactoryRed-9-1"].label, "Factory")
@@ -62,8 +64,12 @@ test("air defence groups and objectives become targets", function()
     expect.isNil(intel.targets()["group:Armor-Red-1"], "one escort AAA does not make an air defence site")
     expect.truthy(logged("red group Armor-Red-1 has 1 of 4 units with air defence (Air Defence) and no radar, it is no air defence site"))
     expect.equal(intel.targets()["group:Shorad-Red-1"].label, "SAM site (short range)", "a radar makes a site")
-    expect.truthy(logged("red air defence site Shorad-Red-1: SAM site (short range) (2 of 5 units, Air Defence, radar), threat ring 8.0 km (default for SR SAM)"))
-    expect.truthy(logged("red air defence site SAM-Red-1: SAM site (medium range) (2 of 2 units, Air Defence, radar), threat ring 35.0 km (missile range)"))
+    expect.truthy(logged("red air defence site Shorad-Red-1: SAM site (short range) (2 of 5 units, Air Defence, radar), "
+        .. "threat ring 8.0 km (default for SR SAM; not in intel.threatRanges: SHORAD Mod)"))
+    expect.truthy(logged("red air defence site SAM-Red-1: SAM site (medium range) (2 of 2 units, Air Defence, radar), "
+        .. "threat ring 35.0 km (SA-11 Buk LN 9A310M1)"))
+    expect.truthy(logged("red air defence site EWR-Red-1: Early warning radar (1 of 1 units, Air Defence, EWR, radar), "
+        .. "threat ring none (no launcher)"))
     expect.truthy(logged("environment at start: sun "))
     expect.equal(#dcs.markErrors, 0)
 end)
@@ -134,6 +140,18 @@ test("the recon package is lost with the aircraft", function()
     expect.isNil(dcs.marks[markId])
     expect.isNil(intel.known(2)["group:SAM-Red-1"])
     expect.truthy(logged("recon package of Hornet (BlueStrike-1-1) with 1 targets lost: aircraft lost"))
+end)
+
+test("a player whose crew died sees nothing", function()
+    enterSlot()
+    put(player, 29000, 0, 1000)
+    local hints = #dcs.findMessages("Recon: SAM site (medium range) spotted")
+    dcs.fire({ id = world.event.S_EVENT_PILOT_DEAD, initiator = player })
+    dcs.advance(10)
+    expect.equal(#dcs.findMessages("Recon: SAM site (medium range) spotted"), hints)
+    expect.isNil(intel.package("BlueStrike-1-1"))
+    expect.truthy(logged("crew of BlueStrike-1-1 is gone (PILOT_DEAD), it no longer observes"))
+    dcs.kill("BlueStrike-1-1")
 end)
 
 test("AI recon reports right away and draws a threat ring", function()

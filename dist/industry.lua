@@ -1679,7 +1679,8 @@ config.defaults = {
         -- AI aircraft that shut down their engines are removed (parking space)
         despawnLandedAI = true,
         -- damaged AI aircraft of respawn groups that sit on the ground without
-        -- moving at two dead checks in a row are removed, so the group respawns
+        -- moving at two dead checks in a row are removed, so the group respawns;
+        -- AI aircraft without crew are blown up once they rest on the ground
         removeStranded = true,
     },
 
@@ -1752,8 +1753,44 @@ config.defaults = {
         airDefenceShare = 0.5,
         -- threat circles around reported air defence sites
         threatRings = true,
-        -- threat radius in meters by attribute when the missiles do not tell
-        threatRadius = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },
+        -- threat range in meters per air defence type, the circles DCS draws
+        -- in the mission editor (0 for radars and command posts); a mission
+        -- may add or change single types
+        threatRanges = {
+            ["1L13 EWR"] = 0, ["2S6 Tunguska"] = 8000, ["55G6 EWR"] = 0, ["5p73 s-125 ln"] = 18000,
+            ["Allies_Director"] = 0, ["bofors40"] = 2000, ["CHAP_IRISTSLM_CP"] = 0,
+            ["CHAP_IRISTSLM_LN"] = 40000, ["CHAP_IRISTSLM_STR"] = 0, ["CHAP_PantsirS1"] = 20000,
+            ["CHAP_TorM2"] = 16000, ["Dog Ear radar"] = 0, ["flak18"] = 5000, ["flak30"] = 2500,
+            ["flak36"] = 5000, ["flak37"] = 5000, ["flak38"] = 2500, ["flak41"] = 5000,
+            ["Flakscheinwerfer_37"] = 0, ["FPS-117"] = 0, ["FPS-117 Dome"] = 0, ["FPS-117 ECS"] = 0,
+            ["FuMG-401"] = 0, ["FuSe-65"] = 0, ["generator_5i57"] = 0, ["Gepard"] = 4000, ["Hawk cwar"] = 0,
+            ["Hawk ln"] = 45000, ["Hawk pcp"] = 0, ["Hawk sr"] = 0, ["Hawk tr"] = 0,
+            ["HEMTT_C-RAM_Phalanx"] = 2000, ["HL_ZU-23"] = 2500, ["HQ-7_LN_P"] = 15000, ["HQ-7_LN_SP"] = 15000,
+            ["HQ-7_STR_SP"] = 0, ["Igla manpad INS"] = 5200, ["KDO_Mod40"] = 0, ["KS-19"] = 20000,
+            ["Kub 1S91 str"] = 0, ["Kub 2P25 ln"] = 25000, ["M1097 Avenger"] = 4500, ["M1_37mm"] = 5700,
+            ["M45_Quadmount"] = 1500, ["M48 Chaparral"] = 8500, ["M6 Linebacker"] = 4500,
+            ["Maschinensatz_33"] = 0, ["NASAMS_Command_Post"] = 0, ["NASAMS_LN_B"] = 15000,
+            ["NASAMS_LN_C"] = 15000, ["NASAMS_Radar_MPQ64F1"] = 0, ["Osa 9A33 ln"] = 10300,
+            ["p-19 s-125 sr"] = 0, ["P14_SR"] = 0, ["Patriot AMG"] = 0, ["Patriot cp"] = 0, ["Patriot ECS"] = 0,
+            ["Patriot EPP"] = 0, ["Patriot ln"] = 100000, ["Patriot str"] = 0, ["QF_37_AA"] = 9000,
+            ["rapier_fsa_blindfire_radar"] = 0, ["rapier_fsa_launcher"] = 6800,
+            ["rapier_fsa_optical_tracker_unit"] = 0, ["RD_75"] = 0, ["RLS_19J6"] = 0, ["Roland ADS"] = 8000,
+            ["Roland Radar"] = 0, ["RPC_5N62V"] = 0, ["S-200_Launcher"] = 255000, ["S-300PS 40B6M tr"] = 0,
+            ["S-300PS 40B6MD sr"] = 0, ["S-300PS 40B6MD sr_19J6"] = 0, ["S-300PS 54K6 cp"] = 0,
+            ["S-300PS 5H63C 30H6_tr"] = 0, ["S-300PS 5P85C ln"] = 120000, ["S-300PS 5P85D ln"] = 120000,
+            ["S-300PS 64H6E sr"] = 0, ["S-60_Type59_Artillery"] = 6000, ["SA-11 Buk CC 9S470M1"] = 0,
+            ["SA-11 Buk LN 9A310M1"] = 50000, ["SA-11 Buk SR 9S18M1"] = 0, ["SA-18 Igla comm"] = 0,
+            ["SA-18 Igla manpad"] = 5200, ["SA-18 Igla-S comm"] = 0, ["SA-18 Igla-S manpad"] = 5200,
+            ["snr s-125 tr"] = 0, ["SNR_75V"] = 0, ["Soldier stinger"] = 4500, ["SON_9"] = 0,
+            ["Stinger comm"] = 0, ["Stinger comm dsr"] = 0, ["Strela-1 9P31"] = 4200, ["Strela-10M3"] = 5000,
+            ["S_75M_Volhov"] = 43000, ["Tor 9A331"] = 12000, ["tt_ZU-23"] = 2500, ["Type_3_80mm_AA"] = 3200,
+            ["Type_88_75mm_AA"] = 3500, ["Type_94_25mm_AA_Truck"] = 3500, ["Type_96_25mm_AA"] = 3500,
+            ["Ural-375 ZU-23"] = 2500, ["Ural-375 ZU-23 Insurgent"] = 2500, ["Vulcan"] = 2000,
+            ["ZSU-23-4 Shilka"] = 2500, ["ZSU_57_2"] = 7000, ["ZU-23 Closed Insurgent"] = 2500,
+            ["ZU-23 Emplacement"] = 2500, ["ZU-23 Emplacement Closed"] = 2500, ["ZU-23 Insurgent"] = 2500,
+        },
+        -- threat range in meters by attribute for types missing in threatRanges
+        threatDefaults = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },
         -- log near misses (terrain, height, clouds, slightly out of range)
         verbose = true,
         -- seconds between two summaries in dcs.log
@@ -1799,7 +1836,8 @@ local openTables = {
     ["intel.nightVisionTypes"] = true,
     ["intel.airDefenceAttributes"] = true,
     ["intel.airDefenceRadars"] = true,
-    ["intel.threatRadius"] = true,
+    ["intel.threatRanges"] = true,
+    ["intel.threatDefaults"] = true,
 }
 
 local function checkKeys(given, defaults, path)
@@ -3368,6 +3406,9 @@ local object, db = tarmac.object, tarmac.db
 local losses = {}
 
 local cfg
+-- [unitName] = true once the loss of a player aircraft was counted; DCS
+-- may report a wreck lost again when it is destroyed later
+local counted = {}
 
 local function coalitionOf(unit)
     local coalitionId = object.coalition(unit)
@@ -3392,7 +3433,15 @@ local function onUnitLost(event)
     end
 
     local playerName = object.playerName(unit)
+    local unitName = object.name(unit)
     if playerName and object.isAircraft(unit) then
+        if unitName then
+            if counted[unitName] then
+                log:info("player %s (%s) reported lost again, not counted", playerName, unitName)
+                return
+            end
+            counted[unitName] = true
+        end
         local coalitionId = coalitionOf(unit)
         log:info("player %s (%s) lost", playerName, tostring(object.name(unit)))
         tickets.reduce(coalitionId, cfg.losses.playerTickets, "player " .. playerName .. " lost")
@@ -3402,6 +3451,13 @@ end
 function losses.setup(configuration)
     cfg = configuration
     tarmac.events.on("UNIT_LOST", onUnitLost)
+    -- a new aircraft in the same slot reuses the unit name
+    tarmac.events.on("BIRTH", function(event)
+        local unitName = object.name(event.initiator)
+        if unitName then
+            counted[unitName] = nil
+        end
+    end)
 end
 
 return losses
@@ -3442,6 +3498,7 @@ local hasHQ = { [1] = false, [2] = false }
 local hqLost = { [1] = false, [2] = false }
 local nearMisses = {}               -- [observer|target] = time of the last log line
 local pendingGroups = {}            -- [groupName] = true while a birth check is scheduled
+local crewless = {}                 -- [unitName] = true after the crew ejected or died
 local stats = { checks = 0, pairs = 0, lineOfSight = 0, observers = { [1] = {}, [2] = {} } }
 
 -- a target is looked at this many meters above its base
@@ -3549,26 +3606,36 @@ local function airDefenceClass(units)
     return { label = "Air defence site" }
 end
 
--- Threat radius from the missiles the units carry, else by class.
+-- Threat radius: the largest threat range of the air defence types in the
+-- group (intel.threatRanges, the circles DCS draws in the mission editor).
+-- A type missing there makes the class default the lower limit. Returns the
+-- radius (nil for none) and where it came from.
 local function threatRadius(units, class)
-    local best = 0
+    local best, source, unknown, seen = 0, nil, {}, {}
     for _, unit in ipairs(units) do
-        for _, ammo in ipairs(object.call(unit, "getAmmo") or {}) do
-            local desc = ammo.desc
-            local range = desc and (desc.rangeMaxAltMax or desc.rangeMaxAltMin)
-            if type(range) == "number" and range > best then
-                best = range
+        local typeName = object.typeName(unit)
+        local range = typeName and cfg.intel.threatRanges[typeName]
+        if type(range) == "number" then
+            if range > best then
+                best, source = range, typeName
             end
+        elseif typeName and not seen[typeName] then
+            seen[typeName] = true
+            unknown[#unknown + 1] = typeName
         end
     end
-    if best > 0 then
-        return best, "missile range"
+    if #unknown > 0 then
+        local default = class.attribute and cfg.intel.threatDefaults[class.attribute]
+        if default and default > best then
+            best, source = default, "default for " .. class.attribute
+        end
+        table.sort(unknown)
+        source = (source or "no launcher") .. "; not in intel.threatRanges: " .. table.concat(unknown, ", ")
     end
-    local radius = class.attribute and cfg.intel.threatRadius[class.attribute]
-    if radius then
-        return radius, "default for " .. class.attribute
+    if best <= 0 then
+        return nil, source or "no launcher"
     end
-    return nil, "no threat ring"
+    return best, source
 end
 
 local function hasRadar(units)
@@ -3810,7 +3877,8 @@ end
 local function observerInfo(unit, coalitionId, playerName)
     local point = object.point(unit)
     local unitName = object.name(unit)
-    if point == nil or unitName == nil then
+    -- a wreck whose crew is gone sees nothing, even with a player inside
+    if point == nil or unitName == nil or crewless[unitName] then
         return nil
     end
     local typeName = object.typeName(unit) or "?"
@@ -4198,6 +4266,9 @@ local function onBirth(event)
     if unitName and packages[unitName] then
         packages[unitName].lost = "new aircraft"
     end
+    if unitName then
+        crewless[unitName] = nil
+    end
     if object.unitCategory(unit) ~= Unit.Category.GROUND_UNIT then
         return
     end
@@ -4216,6 +4287,14 @@ local function onPlayerGone(event)
     local package = unitName and packages[unitName]
     if package and not package.lost then
         package.lost = event.id == world.event.S_EVENT_PLAYER_LEAVE_UNIT and "player left the aircraft" or "aircraft lost"
+    end
+end
+
+local function onCrewGone(event)
+    local unitName = object.name(event.initiator)
+    if unitName and object.isAircraft(event.initiator) and not crewless[unitName] then
+        crewless[unitName] = true
+        log:info("crew of %s is gone (%s), it no longer observes", unitName, tarmac.events.nameOf(event.id))
     end
 end
 
@@ -4286,6 +4365,8 @@ function intel.setup(configuration)
     for _, name in ipairs({ "EJECTION", "PILOT_DEAD", "CRASH", "UNIT_LOST", "PLAYER_LEAVE_UNIT" }) do
         tarmac.events.on(name, onPlayerGone)
     end
+    tarmac.events.on("EJECTION", onCrewGone)
+    tarmac.events.on("PILOT_DEAD", onCrewGone)
     tarmac.scheduler.every(i.interval, intel.check, { delay = i.interval, name = "industry.intel" })
     tarmac.scheduler.every(i.summaryInterval, intel.summary, { delay = i.summaryInterval, name = "industry.intel.summary" })
 end
@@ -4359,6 +4440,11 @@ __modules["industry.stranded"] = function(...)
 -- in a row is removed and counts as lost. Object.destroy does not always
 -- remove a damaged aircraft, so one that is still there at the next check
 -- is blown up.
+--
+-- An AI aircraft whose crew died or ejected may come down without crashing
+-- too, like a helicopter that settles in a field, and keeps drawing enemy
+-- fire. It is watched until it rests on the ground and then blown up.
+-- Player aircraft stay: the player leaves the slot himself.
 
 local tarmac = require("tarmac")
 local respawn = require("industry.respawn")
@@ -4370,10 +4456,15 @@ local stranded = {}
 
 -- below this speed in m/s an aircraft counts as not moving
 local STILL_SPEED = 1
+-- seconds between two looks at an aircraft without crew, and how often
+local WRECK_INTERVAL = 10
+local WRECK_LOOKS = 60
+local WRECK_EXPLOSION = 400
 
 local damaged = {}  -- [unitName] = true after a hit or an aborted mission
 local suspects = {} -- [unitName] = true when found stranded at the last check
 local removed = {}  -- [unitName] = unit removed at the last check
+local wrecks = {}   -- [unitName] = true while an aircraft without crew is watched
 
 local function speed(unit)
     local velocity = object.call(unit, "getVelocity")
@@ -4439,6 +4530,44 @@ function stranded.check()
     suspects = found
 end
 
+local function removeLeftover(unit, unitName)
+    if object.exists(unit) then
+        log:info("%s survived the explosion, removed", unitName)
+        tracker.destroyUnit(unit)
+    end
+end
+
+local function watchWreck(unit, unitName, looks)
+    if not object.exists(unit) then
+        return
+    end
+    if object.call(unit, "inAir") == false then
+        local current, point = speed(unit), object.point(unit)
+        if current ~= nil and current < STILL_SPEED and point then
+            trigger.action.explosion(point, WRECK_EXPLOSION)
+            log:info("%s rests on the ground without crew, blown up", unitName)
+            tarmac.scheduler.after(WRECK_INTERVAL, removeLeftover, unit, unitName)
+            return
+        end
+    end
+    if looks >= WRECK_LOOKS then
+        log:info("%s without crew did not come to rest, left alone", unitName)
+        return
+    end
+    tarmac.scheduler.after(WRECK_INTERVAL, watchWreck, unit, unitName, looks + 1)
+end
+
+-- the crew of an aircraft died or ejected
+local function onCrewGone(event)
+    local unit = event.initiator
+    local unitName = object.name(unit)
+    if unitName == nil or wrecks[unitName] or not object.isAircraft(unit) or object.playerName(unit) ~= nil then
+        return
+    end
+    wrecks[unitName] = true
+    tarmac.scheduler.after(WRECK_INTERVAL, watchWreck, unit, unitName, 1)
+end
+
 local function markDamaged(unit)
     local unitName = object.name(unit)
     if unitName and object.isAircraft(unit) then
@@ -4462,8 +4591,11 @@ function stranded.setup(configuration)
         if unitName then
             damaged[unitName] = nil
             suspects[unitName] = nil
+            wrecks[unitName] = nil
         end
     end)
+    tarmac.events.on("PILOT_DEAD", onCrewGone)
+    tarmac.events.on("EJECTION", onCrewGone)
     local interval = configuration.respawn.deadCheckInterval
     tarmac.scheduler.every(interval, stranded.check, { delay = interval + 8, name = "industry.stranded" })
 end

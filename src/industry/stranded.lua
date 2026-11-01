@@ -7,6 +7,11 @@
 -- in a row is removed and counts as lost. Object.destroy does not always
 -- remove a damaged aircraft, so one that is still there at the next check
 -- is blown up.
+--
+-- An AI aircraft whose crew died or ejected may come down without crashing
+-- too, like a helicopter that settles in a field, and keeps drawing enemy
+-- fire. It is watched until it rests on the ground and then blown up.
+-- Player aircraft stay: the player leaves the slot himself.
 
 local tarmac = require("tarmac")
 local respawn = require("industry.respawn")
@@ -18,10 +23,15 @@ local stranded = {}
 
 -- below this speed in m/s an aircraft counts as not moving
 local STILL_SPEED = 1
+-- seconds between two looks at an aircraft without crew, and how often
+local WRECK_INTERVAL = 10
+local WRECK_LOOKS = 60
+local WRECK_EXPLOSION = 400
 
 local damaged = {}  -- [unitName] = true after a hit or an aborted mission
 local suspects = {} -- [unitName] = true when found stranded at the last check
 local removed = {}  -- [unitName] = unit removed at the last check
+local wrecks = {}   -- [unitName] = true while an aircraft without crew is watched
 
 local function speed(unit)
     local velocity = object.call(unit, "getVelocity")
@@ -87,6 +97,44 @@ function stranded.check()
     suspects = found
 end
 
+local function removeLeftover(unit, unitName)
+    if object.exists(unit) then
+        log:info("%s survived the explosion, removed", unitName)
+        tracker.destroyUnit(unit)
+    end
+end
+
+local function watchWreck(unit, unitName, looks)
+    if not object.exists(unit) then
+        return
+    end
+    if object.call(unit, "inAir") == false then
+        local current, point = speed(unit), object.point(unit)
+        if current ~= nil and current < STILL_SPEED and point then
+            trigger.action.explosion(point, WRECK_EXPLOSION)
+            log:info("%s rests on the ground without crew, blown up", unitName)
+            tarmac.scheduler.after(WRECK_INTERVAL, removeLeftover, unit, unitName)
+            return
+        end
+    end
+    if looks >= WRECK_LOOKS then
+        log:info("%s without crew did not come to rest, left alone", unitName)
+        return
+    end
+    tarmac.scheduler.after(WRECK_INTERVAL, watchWreck, unit, unitName, looks + 1)
+end
+
+-- the crew of an aircraft died or ejected
+local function onCrewGone(event)
+    local unit = event.initiator
+    local unitName = object.name(unit)
+    if unitName == nil or wrecks[unitName] or not object.isAircraft(unit) or object.playerName(unit) ~= nil then
+        return
+    end
+    wrecks[unitName] = true
+    tarmac.scheduler.after(WRECK_INTERVAL, watchWreck, unit, unitName, 1)
+end
+
 local function markDamaged(unit)
     local unitName = object.name(unit)
     if unitName and object.isAircraft(unit) then
@@ -110,8 +158,11 @@ function stranded.setup(configuration)
         if unitName then
             damaged[unitName] = nil
             suspects[unitName] = nil
+            wrecks[unitName] = nil
         end
     end)
+    tarmac.events.on("PILOT_DEAD", onCrewGone)
+    tarmac.events.on("EJECTION", onCrewGone)
     local interval = configuration.respawn.deadCheckInterval
     tarmac.scheduler.every(interval, stranded.check, { delay = interval + 8, name = "industry.stranded" })
 end

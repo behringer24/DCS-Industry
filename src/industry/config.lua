@@ -46,7 +46,8 @@ config.defaults = {
         -- AI aircraft that shut down their engines are removed (parking space)
         despawnLandedAI = true,
         -- damaged AI aircraft of respawn groups that sit on the ground without
-        -- moving at two dead checks in a row are removed, so the group respawns
+        -- moving at two dead checks in a row are removed, so the group respawns;
+        -- AI aircraft without crew are blown up once they rest on the ground
         removeStranded = true,
     },
 
@@ -119,8 +120,44 @@ config.defaults = {
         airDefenceShare = 0.5,
         -- threat circles around reported air defence sites
         threatRings = true,
-        -- threat radius in meters by attribute when the missiles do not tell
-        threatRadius = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },
+        -- threat range in meters per air defence type, the circles DCS draws
+        -- in the mission editor (0 for radars and command posts); a mission
+        -- may add or change single types
+        threatRanges = {
+            ["1L13 EWR"] = 0, ["2S6 Tunguska"] = 8000, ["55G6 EWR"] = 0, ["5p73 s-125 ln"] = 18000,
+            ["Allies_Director"] = 0, ["bofors40"] = 2000, ["CHAP_IRISTSLM_CP"] = 0,
+            ["CHAP_IRISTSLM_LN"] = 40000, ["CHAP_IRISTSLM_STR"] = 0, ["CHAP_PantsirS1"] = 20000,
+            ["CHAP_TorM2"] = 16000, ["Dog Ear radar"] = 0, ["flak18"] = 5000, ["flak30"] = 2500,
+            ["flak36"] = 5000, ["flak37"] = 5000, ["flak38"] = 2500, ["flak41"] = 5000,
+            ["Flakscheinwerfer_37"] = 0, ["FPS-117"] = 0, ["FPS-117 Dome"] = 0, ["FPS-117 ECS"] = 0,
+            ["FuMG-401"] = 0, ["FuSe-65"] = 0, ["generator_5i57"] = 0, ["Gepard"] = 4000, ["Hawk cwar"] = 0,
+            ["Hawk ln"] = 45000, ["Hawk pcp"] = 0, ["Hawk sr"] = 0, ["Hawk tr"] = 0,
+            ["HEMTT_C-RAM_Phalanx"] = 2000, ["HL_ZU-23"] = 2500, ["HQ-7_LN_P"] = 15000, ["HQ-7_LN_SP"] = 15000,
+            ["HQ-7_STR_SP"] = 0, ["Igla manpad INS"] = 5200, ["KDO_Mod40"] = 0, ["KS-19"] = 20000,
+            ["Kub 1S91 str"] = 0, ["Kub 2P25 ln"] = 25000, ["M1097 Avenger"] = 4500, ["M1_37mm"] = 5700,
+            ["M45_Quadmount"] = 1500, ["M48 Chaparral"] = 8500, ["M6 Linebacker"] = 4500,
+            ["Maschinensatz_33"] = 0, ["NASAMS_Command_Post"] = 0, ["NASAMS_LN_B"] = 15000,
+            ["NASAMS_LN_C"] = 15000, ["NASAMS_Radar_MPQ64F1"] = 0, ["Osa 9A33 ln"] = 10300,
+            ["p-19 s-125 sr"] = 0, ["P14_SR"] = 0, ["Patriot AMG"] = 0, ["Patriot cp"] = 0, ["Patriot ECS"] = 0,
+            ["Patriot EPP"] = 0, ["Patriot ln"] = 100000, ["Patriot str"] = 0, ["QF_37_AA"] = 9000,
+            ["rapier_fsa_blindfire_radar"] = 0, ["rapier_fsa_launcher"] = 6800,
+            ["rapier_fsa_optical_tracker_unit"] = 0, ["RD_75"] = 0, ["RLS_19J6"] = 0, ["Roland ADS"] = 8000,
+            ["Roland Radar"] = 0, ["RPC_5N62V"] = 0, ["S-200_Launcher"] = 255000, ["S-300PS 40B6M tr"] = 0,
+            ["S-300PS 40B6MD sr"] = 0, ["S-300PS 40B6MD sr_19J6"] = 0, ["S-300PS 54K6 cp"] = 0,
+            ["S-300PS 5H63C 30H6_tr"] = 0, ["S-300PS 5P85C ln"] = 120000, ["S-300PS 5P85D ln"] = 120000,
+            ["S-300PS 64H6E sr"] = 0, ["S-60_Type59_Artillery"] = 6000, ["SA-11 Buk CC 9S470M1"] = 0,
+            ["SA-11 Buk LN 9A310M1"] = 50000, ["SA-11 Buk SR 9S18M1"] = 0, ["SA-18 Igla comm"] = 0,
+            ["SA-18 Igla manpad"] = 5200, ["SA-18 Igla-S comm"] = 0, ["SA-18 Igla-S manpad"] = 5200,
+            ["snr s-125 tr"] = 0, ["SNR_75V"] = 0, ["Soldier stinger"] = 4500, ["SON_9"] = 0,
+            ["Stinger comm"] = 0, ["Stinger comm dsr"] = 0, ["Strela-1 9P31"] = 4200, ["Strela-10M3"] = 5000,
+            ["S_75M_Volhov"] = 43000, ["Tor 9A331"] = 12000, ["tt_ZU-23"] = 2500, ["Type_3_80mm_AA"] = 3200,
+            ["Type_88_75mm_AA"] = 3500, ["Type_94_25mm_AA_Truck"] = 3500, ["Type_96_25mm_AA"] = 3500,
+            ["Ural-375 ZU-23"] = 2500, ["Ural-375 ZU-23 Insurgent"] = 2500, ["Vulcan"] = 2000,
+            ["ZSU-23-4 Shilka"] = 2500, ["ZSU_57_2"] = 7000, ["ZU-23 Closed Insurgent"] = 2500,
+            ["ZU-23 Emplacement"] = 2500, ["ZU-23 Emplacement Closed"] = 2500, ["ZU-23 Insurgent"] = 2500,
+        },
+        -- threat range in meters by attribute for types missing in threatRanges
+        threatDefaults = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },
         -- log near misses (terrain, height, clouds, slightly out of range)
         verbose = true,
         -- seconds between two summaries in dcs.log
@@ -166,7 +203,8 @@ local openTables = {
     ["intel.nightVisionTypes"] = true,
     ["intel.airDefenceAttributes"] = true,
     ["intel.airDefenceRadars"] = true,
-    ["intel.threatRadius"] = true,
+    ["intel.threatRanges"] = true,
+    ["intel.threatDefaults"] = true,
 }
 
 local function checkKeys(given, defaults, path)

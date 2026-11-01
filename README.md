@@ -110,8 +110,12 @@ A damaged aircraft that does not crash — an emergency landing in a field, a da
 wreck left on a runway — raises no further event and would block its respawn group forever. Every
 `respawn.deadCheckInterval` seconds Industry checks the AI aircraft of respawn groups. One that is damaged (it was
 hit, its AI aborted the mission or it lost life), on the ground and not moving at two checks in a row is removed
-and counts as lost. If it is still there at the next check, it is blown up. Players and ground vehicles are never
-touched. Switch it off with `respawn.removeStranded = false`.
+and counts as lost. If it is still there at the next check, it is blown up.
+
+The same goes for any AI aircraft whose crew died or ejected and that came down without crashing, like a
+helicopter that settles in a field: enemy units would keep firing at it. It is watched every 10 seconds and blown
+up as soon as it rests on the ground, without waiting for the checks. Players and ground vehicles are never
+touched; a player leaves the slot himself. Switch both off with `respawn.removeStranded = false`.
 
 ### Search and rescue
 Place one helicopter group named `TPL-SAR-Red` (rescues red pilots) and one named `TPL-SAR-Blue` (rescues blue
@@ -150,7 +154,8 @@ reached the coalition's HQ:
   *Reconnaissance* in the mission editor and the types in `intel.reconTypes` — see farther and from higher up.
 - **Players** get a message when they spot something (*Recon: Factory spotted, bearing 312 for 8 km*) and a mark
   that only their group sees. *F10 → HQ → Send recon report* sends everything spotted since the last report.
-  What is not sent is lost with the aircraft, on ejection or when the player leaves the slot.
+  What is not sent is lost with the aircraft, on ejection or when the player leaves the slot. An aircraft whose
+  crew died or ejected sees nothing, even while the player still sits in it.
 - **Without HQ a coalition is blind.** When its last HQ objective is destroyed, all its reports and marks
   disappear, nobody spots anything any more and the HQ menu is gone. A coalition without any HQ objective in
   the mission does its reconnaissance without HQ.
@@ -166,13 +171,19 @@ Whether a target is spotted depends on:
 | Weather  | never beyond the mission visibility; fog and dust limit points inside them; overcast clouds between observer and target block the view, broken clouds ×0.5 |
 | Terrain  | the line of sight must be free (hills and mountains; trees and buildings do not block it) |
 
-Reported air defence sites get a red threat circle. Its radius is the missile range of the launchers, else
-`intel.threatRadius` by DCS attribute (`intel.threatRings`). Destroyed targets stay on the map, marked
+Reported air defence sites get a red threat circle (`intel.threatRings`). Its radius is the largest threat range
+of the site's types in `intel.threatRanges` — the circles DCS draws in the mission editor, e.g. Tor M2 16 km,
+NASAMS 15 km, SA-11 50 km. A mission can add or change single types there. For a type missing in the table the
+default of its class in `intel.threatDefaults` is the lower limit; `dcs.log` names such types. Scripts cannot read
+the DCS values at runtime, so the table has to follow DCS updates. Destroyed targets stay on the map, marked
 destroyed with a grey circle. A site that is rebuilt (respawn) has to be found again.
 
 `dcs.log` tells with the prefix `[industry.intel]` who spotted what with the full range calculation, near misses
 (terrain, too high, clouds, just out of range; `intel.verbose`), reports, lost recon packages and a summary every
 `intel.summaryInterval` seconds — so the parameters can be tuned with the log of a real mission.
+
+Set the F10 view in the mission options to *Allies only*. With *Fog of war* DCS shows enemy units its own sensors
+detect, e.g. SAM radars picked up by radar warners, regardless of the reports.
 
 Without reconnaissance (`intel.enabled = false`) all enemy objectives are marked from the start
 (`objectives.markers`), as in 2.0.
@@ -246,12 +257,13 @@ industry.setup({
         airDefenceRadars = { ["SAM SR"] = true, ["SAM TR"] = true, ["EWR"] = true },
         airDefenceShare = 0.5, -- share of air defence units that makes a group without radar a site
         threatRings = true,
-        threatRadius = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },
+        threatRanges = { ["CHAP_TorM2"] = 16000, --[[ ... per type, see src/industry/config.lua ]] },
+        threatDefaults = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },
         verbose = true,       -- log near misses
         summaryInterval = 600,
     },
     losses = {
-        playerTickets = 1,    -- tickets per destroyed player aircraft
+        playerTickets = 1,    -- tickets per destroyed player aircraft, counted once per aircraft
         vehicleSmoke = true,
     },
     csar = {

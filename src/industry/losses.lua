@@ -10,6 +10,9 @@ local object, db = tarmac.object, tarmac.db
 local losses = {}
 
 local cfg
+-- [unitName] = true once the loss of a player aircraft was counted; DCS
+-- may report a wreck lost again when it is destroyed later
+local counted = {}
 
 local function coalitionOf(unit)
     local coalitionId = object.coalition(unit)
@@ -34,7 +37,15 @@ local function onUnitLost(event)
     end
 
     local playerName = object.playerName(unit)
+    local unitName = object.name(unit)
     if playerName and object.isAircraft(unit) then
+        if unitName then
+            if counted[unitName] then
+                log:info("player %s (%s) reported lost again, not counted", playerName, unitName)
+                return
+            end
+            counted[unitName] = true
+        end
         local coalitionId = coalitionOf(unit)
         log:info("player %s (%s) lost", playerName, tostring(object.name(unit)))
         tickets.reduce(coalitionId, cfg.losses.playerTickets, "player " .. playerName .. " lost")
@@ -44,6 +55,13 @@ end
 function losses.setup(configuration)
     cfg = configuration
     tarmac.events.on("UNIT_LOST", onUnitLost)
+    -- a new aircraft in the same slot reuses the unit name
+    tarmac.events.on("BIRTH", function(event)
+        local unitName = object.name(event.initiator)
+        if unitName then
+            counted[unitName] = nil
+        end
+    end)
 end
 
 return losses

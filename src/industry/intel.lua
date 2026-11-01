@@ -31,6 +31,7 @@ local hasHQ = { [1] = false, [2] = false }
 local hqLost = { [1] = false, [2] = false }
 local nearMisses = {}               -- [observer|target] = time of the last log line
 local pendingGroups = {}            -- [groupName] = true while a birth check is scheduled
+local crewless = {}                 -- [unitName] = true after the crew ejected or died
 local stats = { checks = 0, pairs = 0, lineOfSight = 0, observers = { [1] = {}, [2] = {} } }
 
 -- a target is looked at this many meters above its base
@@ -138,26 +139,36 @@ local function airDefenceClass(units)
     return { label = "Air defence site" }
 end
 
--- Threat radius from the missiles the units carry, else by class.
+-- Threat radius: the largest threat range of the air defence types in the
+-- group (intel.threatRanges, the circles DCS draws in the mission editor).
+-- A type missing there makes the class default the lower limit. Returns the
+-- radius (nil for none) and where it came from.
 local function threatRadius(units, class)
-    local best = 0
+    local best, source, unknown, seen = 0, nil, {}, {}
     for _, unit in ipairs(units) do
-        for _, ammo in ipairs(object.call(unit, "getAmmo") or {}) do
-            local desc = ammo.desc
-            local range = desc and (desc.rangeMaxAltMax or desc.rangeMaxAltMin)
-            if type(range) == "number" and range > best then
-                best = range
+        local typeName = object.typeName(unit)
+        local range = typeName and cfg.intel.threatRanges[typeName]
+        if type(range) == "number" then
+            if range > best then
+                best, source = range, typeName
             end
+        elseif typeName and not seen[typeName] then
+            seen[typeName] = true
+            unknown[#unknown + 1] = typeName
         end
     end
-    if best > 0 then
-        return best, "missile range"
+    if #unknown > 0 then
+        local default = class.attribute and cfg.intel.threatDefaults[class.attribute]
+        if default and default > best then
+            best, source = default, "default for " .. class.attribute
+        end
+        table.sort(unknown)
+        source = (source or "no launcher") .. "; not in intel.threatRanges: " .. table.concat(unknown, ", ")
     end
-    local radius = class.attribute and cfg.intel.threatRadius[class.attribute]
-    if radius then
-        return radius, "default for " .. class.attribute
+    if best <= 0 then
+        return nil, source or "no launcher"
     end
-    return nil, "no threat ring"
+    return best, source
 end
 
 local function hasRadar(units)
@@ -399,7 +410,8 @@ end
 local function observerInfo(unit, coalitionId, playerName)
     local point = object.point(unit)
     local unitName = object.name(unit)
-    if point == nil or unitName == nil then
+    -- a wreck whose crew is gone sees nothing, even with a player inside
+    if point == nil or unitName == nil or crewless[unitName] then
         return nil
     end
     local typeName = object.typeName(unit) or "?"
@@ -787,6 +799,9 @@ local function onBirth(event)
     if unitName and packages[unitName] then
         packages[unitName].lost = "new aircraft"
     end
+    if unitName then
+        crewless[unitName] = nil
+    end
     if object.unitCategory(unit) ~= Unit.Category.GROUND_UNIT then
         return
     end
@@ -805,6 +820,14 @@ local function onPlayerGone(event)
     local package = unitName and packages[unitName]
     if package and not package.lost then
         package.lost = event.id == world.event.S_EVENT_PLAYER_LEAVE_UNIT and "player left the aircraft" or "aircraft lost"
+    end
+end
+
+local function onCrewGone(event)
+    local unitName = object.name(event.initiator)
+    if unitName and object.isAircraft(event.initiator) and not crewless[unitName] then
+        crewless[unitName] = true
+        log:info("crew of %s is gone (%s), it no longer observes", unitName, tarmac.events.nameOf(event.id))
     end
 end
 
@@ -875,6 +898,8 @@ function intel.setup(configuration)
     for _, name in ipairs({ "EJECTION", "PILOT_DEAD", "CRASH", "UNIT_LOST", "PLAYER_LEAVE_UNIT" }) do
         tarmac.events.on(name, onPlayerGone)
     end
+    tarmac.events.on("EJECTION", onCrewGone)
+    tarmac.events.on("PILOT_DEAD", onCrewGone)
     tarmac.scheduler.every(i.interval, intel.check, { delay = i.interval, name = "industry.intel" })
     tarmac.scheduler.every(i.summaryInterval, intel.summary, { delay = i.summaryInterval, name = "industry.intel.summary" })
 end

@@ -31,10 +31,18 @@ test("AI losses do not cost tickets", function()
     expect.equal(tickets.get(2), 27)
 end)
 
+test("a player wreck reported lost again costs no second ticket", function()
+    local player = dcs.spawnPlayer("BlueStrike-1-1", "Hornet"):getUnit(1)
+    dcs.fire({ id = world.event.S_EVENT_UNIT_LOST, initiator = player })
+    expect.equal(tickets.get(2), 26)
+    dcs.fire({ id = world.event.S_EVENT_UNIT_LOST, initiator = player })
+    expect.equal(tickets.get(2), 26, "counted once")
+end)
+
 test("events without initiator are ignored", function()
     dcs.fire({ id = world.event.S_EVENT_UNIT_LOST })
     dcs.fire({ id = world.event.S_EVENT_KILL })
-    expect.equal(tickets.get(2), 27)
+    expect.equal(tickets.get(2), 26)
 end)
 
 test("the low ticket flag is set below the threshold", function()
@@ -45,7 +53,7 @@ end)
 
 test("unknown coalitions are rejected without an error", function()
     tickets.reduce(nil, 5, "test")
-    expect.equal(tickets.get(2), 22)
+    expect.equal(tickets.get(2), 21)
 end)
 
 test("blue wins when red runs out of tickets and the blue flag is set", function()

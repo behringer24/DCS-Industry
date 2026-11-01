@@ -79,6 +79,43 @@ test("an aircraft that survives its removal is blown up at the next check", func
     expect.truthy(logged("RedCAP-1-2 was not removed, blown up"))
 end)
 
+test("an AI aircraft whose crew died is blown up once it rests on the ground", function()
+    local leftover = dcs.unit("RedCAP-1-2")
+    leftover.destroy = nil
+    leftover:destroy()
+    local unit = dcs.unit("BlueCAP-1-1")
+    unit.airborne = true
+    unit.velocity = { x = 30, y = -5, z = 0 }
+    local explosions = #dcs.explosions
+    dcs.fire({ id = world.event.S_EVENT_PILOT_DEAD, initiator = unit })
+    dcs.advance(30)
+    expect.equal(#dcs.explosions, explosions, "still coming down")
+
+    unit.airborne = false
+    unit.velocity = { x = 3, y = 0, z = 0 }
+    dcs.advance(10)
+    expect.equal(#dcs.explosions, explosions, "still sliding")
+
+    unit.velocity = nil
+    dcs.advance(10)
+    expect.equal(#dcs.explosions, explosions + 1)
+    expect.equal(dcs.explosions[#dcs.explosions].power, 400)
+    expect.truthy(logged("BlueCAP-1-1 rests on the ground without crew, blown up"))
+
+    dcs.advance(10)
+    expect.falsy(unit:isExist(), "the mock explosion destroys nothing, so the leftover is removed")
+    expect.truthy(logged("BlueCAP-1-1 survived the explosion, removed"))
+end)
+
+test("a player aircraft whose crew died stays", function()
+    local player = dcs.unit("BlueStrike-1-1")
+    local explosions = #dcs.explosions
+    dcs.fire({ id = world.event.S_EVENT_PILOT_DEAD, initiator = player })
+    dcs.advance(60)
+    expect.equal(#dcs.explosions, explosions)
+    expect.truthy(player:isExist())
+end)
+
 test("nothing logged an error", function()
     local errors = industryFixture.errors()
     expect.equal(#errors, 0, table.concat(errors, " | "))
