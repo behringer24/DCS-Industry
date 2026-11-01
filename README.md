@@ -1,260 +1,277 @@
 # DCS-Industry
-Industry script for DCS World
+Industry Wars script for DCS World — resources, respawns and tickets.
+
+> **Version 2 is in development** on this branch. It no longer needs MIST and is configured with one
+> Lua table. The last 1.x release is tagged `v1.5.1`; its documentation is in the README of that tag.
 
 ## Description
-Industry adds a ressource management and respawn system to DCS missions. All AI units need ressources to
+Industry adds a resource management and respawn system to DCS missions. All AI units need resources to
 respawn. If the mission is well balanced this leads to a very dynamic battlefield where the player(s) make
-the difference. Industry can be used for single- or multiplayer missions.
+the difference: whoever cuts the supply of the enemy also cuts its respawns. Industry can be used for
+single- or multiplayer missions.
 
-Ressources are generated through factories. Production is increased per laboratory and ressources are evenly
-stored in storage facilities. All are represented by static units of your choice, they only have to have the correct unit names (see below).
+Resources are produced by factories, boosted by laboratories and kept in storages. All of them are static
+objects of your choice, they only need the right name prefix. Convoys and air transports deliver additional
+resources.
+
+Discuss on Discord: https://discord.gg/bTzjqZKa
 
 ## Features
-- Regular production of new ressources in factories
-- Delivery of ressources by aerial transport missions or convoys on the ground
-- Convoy deliveries are evaluated if the right units (e.g. Trucks and how many of them) are still in the group upon delivery
-- Limited storage of ressources in storage facilities
-- Respawns (of AI units for now) depending on available ressources
-- Automatic handling of AI unit crashes, dead groups, RTB on bingo fuel or out of ammo
-- factories, storages and transports can (and should) be destroyed in player or AI missions
-- mission ends if no storages are left (limits ressources to 0) and allows a 10 minutes countdown
+- Regular production of resources in factories, boosted by laboratories, limited by storages
+- Deliveries by convoys (no script in the mission editor needed) and air transports (no trigger needed)
+- Respawn of AI groups for resources, with a strict queue so expensive groups are not starved
+- Tickets that limit the mission time and decide the winner
+- Strategic objectives (factories, laboratories, storages, HQs, secondary targets) marked on the F10 map
+- Automatic combat search and rescue missions for pilots that landed with the parachute
+- F10 statistics menu for every player, including dynamic slots
+- Robust against units that disappear without events (emergency landings, despawned wrecks) and against
+  damaged aircraft that are stranded on the ground
 
 ## Requirements
-Industry relies on MIST. The latest tested version to work with Industry is MIST version 4.4.107
-- Wiki/Homepage: https://wiki.hoggitworld.com/view/Mission_Scripting_Tools_Documentation
-- ED-Forum: https://forum.dcs.world/topic/82178-mission-scripting-tools-mist-enhancing-mission-scripting-lua
-- GitHub: https://github.com/mrSkortch/MissionScriptingTools
+Nothing but DCS World. Industry 2 is built on [DCS Tarmac](https://github.com/behringer24/DCS-Tarmac), which is
+included in `dist/industry.lua`. MIST is not needed any more. If a mission also loads Tarmac on its own,
+Industry uses that copy.
 
 ## Installation
-- Download and unpack the MIST .lua file from https://github.com/mrSkortch/MissionScriptingTools/releases
-- Download the industry.lua file from this repo
-- Copy both files where you will find them in the mission editor file open dialog
-- In your DCS mission editor add a trigger with once, time > 1sec and two "do script file" actions.
-  In the first action load the MIST .lua file, in the second load the Industry .lua file
+1. Download `dist/industry.lua` from this repository.
+2. Write the mission configuration, e.g. `init.lua` (see [examples/init.lua](examples/init.lua)).
+3. In the mission editor add a trigger *ONCE*, condition *TIME MORE (1)*, with two *DO SCRIPT FILE* actions:
+   first `industry.lua`, then `init.lua`.
+
+`init.lua` calls `industry.setup({...})`, which starts Industry. If `setup` is never called, Industry writes
+an error to `dcs.log` and shows a message after ten seconds.
 
 ## Mission setup
-### Adding factories
-Factories produce 10 tons of ressources every cycle if they are not destroyed. The amount can be configured (see below).
 
-You can use any static object to use as a factory facility. I prefer to use the oil pump, or some bigger factory-like looking buildings.
+### Objectives
+Static objects become objectives when their **unit name starts with** one of these prefixes:
 
-To be detected / handled as a factory, the static objects unit name just has to start with "Factory[...]". The rest of the name can be whatever you like.
+| Prefix       | Effect                                                   | Tickets lost when destroyed          |
+|--------------|----------------------------------------------------------|--------------------------------------|
+| `Factory`    | produces `production.perFactory` tons per cycle          | 10                                   |
+| `Laboratory` | adds `production.labBoost` percent of factory production | 5                                    |
+| `Storage`    | holds `production.storageCapacity` tons                  | its share of the remaining tickets   |
+| `HQ`         | —                                                        | half of the remaining tickets        |
+| `Secondary`  | optional target                                          | 1                                    |
 
-### Adding laboratories
-Labs increase the production of factories by 10% (each, not stacked). The percentage boost can be configured.
-
-Use any static object as a lab. To be handled as a laboratory, the static objects unit name just has to start with "Laboratory[...]".
-
-### Adding storages
-Any static object can be used as a storage facility. Just place a static object that looks like a storage (like a liquid-tank or "small werehouse").
-
-To be detected / handled as a storage facility, the static objects unit name just has to start with "Storage[...]".
-
-Storages hold 1000 tons of ressources per default until they are destroyed.
-
-Ressources are distributed evenly between storages. If a storage is destroyed then the ressources are lost in the quota that had been hold in that storage.
-
-### Adding convoys
-Create a group that acts as a convoy and set its waypoints.
-
-At the destination waypoint add an "Advanced Waypoint Action" "Perform Command" -> "Script" and add into the text box
-
-``` lua
-industry.addRessourcesConvoy("ConvoyBlue-1", "M 818", 100);
-industry.queueRespawn("ConvoyBlue-1", 0)
-```
-
-* *industry.addRessourcesConvoy* is the command to add ressources of a convoy to the storages
-* *ConvoyBlue-1* is the name of the group. The name is just an example, replace this with the name of your group
-* *M 818* is the DCS type name of the units in the group that carry the ressources. In this case it is the internal name of the M939 truck.
-* *100* is the amount of ressources each unit (M 818 in this case) carries
-* *industry.queueRespawn* is the command to put the "*ConvoyBlue-1*" group into the queue for respawning
-* *0* is the amount of ressources the respawn will cost. In this case 0 tons. The convoy was not destroyed but reached its destination. more in the chapter about *queues*.
-
-### Adding air transports
-Air transports, that deliver ressources, work a bit different than convoys. The reason is that the end waypoint does not allow scripts and air units might land at a different airports due to damages or other AI decisions.
-
-Just add a single air transport unit and send it to your "homebase" airport with a landing waypoint.
-
-You need to create a trigger for each air transport. The Industry script handles the engine shutdown for each air unit and queues them for respawn (if they are in a respawn group, see below). Set the trigger to "Continuous", or this trigger would only work once.
-
-For Rules add "Flag is true" and for the flag name enter then name of the unit (not group!) and append "*_landed*" for example: "*TransportBlue-1-1_landed*".
-
-For "Actions" add a "Do Script" action and enter
-
-``` lua
-industry.addRessourcesTransport("blue", 800)
-```
-
-* *addRessourcesTransport* is the command to add ressources for a coalition due to this event.
-* *"blue"* the coalition to add ressources for, red or blue. But do not forget the quotes.
-* *800* the amount in tons to add
-
-You also need to set the Flag back to false via the addidional action "Clear flag" and the name of the flag above, in our example: "*TransportBlue-1-1_landed*". Or this would trigger every second again and again.
+The prefixes are matched at the start of the name only (`HQ Blue` is an HQ, `BlueHQ` is not) and can be
+changed in `objectives.prefixes`. Resources are spread evenly over all storages; a destroyed storage loses
+its share. Without storages a coalition cannot keep any resources.
 
 ### Respawning groups
-You can set every group you like as an automatic respawn group. When the group is dead it is queued for respawn. Different events are detected to determine the death of a unit and if it was the last one the whole group.
-
-You can turn every AI group into a respawn group (NOT player/client groups!).
-
-When the mission starts (and after industry script was initialized) you just need to call
+Every AI group listed in `respawn.groups` respawns at its original position when its last unit is lost:
 
 ```lua
-industry.addRespawnGroup("RedCAP-3", 200)
+respawn = {
+    groups = {
+        ["RedCAP-1"] = 400,             -- costs 400 tons
+        ["TankPlatoonRed-1"] = {},      -- default cost of its category (respawn.costs)
+        ["RedArty-1"] = { cost = 200 },
+    },
+},
 ```
 
-* *addRespawnGroup* is the command to add a group to the list of automatically respawning groups
-* *RedCAP-3* is the name of your group you want to respawn. The name is just an example, replace this with the name of your group
-* *200* are the cost of ressources in tons to respawn this group, can also be 0
+Do not list player groups.
 
-I set this into a "Do script" command in the same trigger where I load the MIST and industry .lua files. I prefer creating an additional init.lua file, where i put all of the addRespawnGroup commands and configuration parameters.
+### Convoys
+Ground groups whose name starts with `Convoy` (e.g. `Convoy-Red-1`) are convoys. Give them a route; when
+they reach the **last waypoint**, every surviving truck delivers `logistics.tonsPerTruck` tons. Trucks are
+the units with the DCS attribute *Trucks* — or the types listed in `logistics.truckTypes`. Industry adds
+the waypoint action itself, so the mission editor needs no script. The convoy then respawns for free.
 
-### Configuration
-Industry supports the following configurations (with its default values).
+### Air transports
+Aircraft groups whose name starts with `Transport` (e.g. `Transport-Red-1`) are transports. Send them to a
+friendly airbase with a landing waypoint. When a transport shuts down its engines on the ground it delivers
+`logistics.tonsPerTransport` tons (nothing if it landed at an enemy airbase), is removed and respawns for free.
 
-``` lua
-industry.config.startRessources = 200
-industry.config.factoryProduction = 30
-industry.config.storageCapacity = 1000
-industry.config.productionLoopTime = 300
-industry.config.respawnLoopTime = 60
-industry.config.labsboost = 10
-industry.config.checkDeadGroupsTime = 300
-industry.config.respawnRetriesOnQueue = 2
-industry.config.winCountdownLength = 600
-industry.config.tickets = 100
+Groups with other names can get a role and an individual amount:
+
+```lua
+logistics = {
+    groups = {
+        ["RedTransport-1"] = { role = "transport", tons = 1200 },
+        ["Supply North"] = { role = "convoy", tons = 150 },  -- tons per truck
+    },
+},
 ```
 
-#### industry.config.startRessources
-how many tons of ressources does each coalition have right from the start of the mission. Has direct consequences how the mission continues after the first wave of spawned ai units have clashed.
+### Landed AI aircraft
+AI aircraft that shut down their engines on the ground are removed (`respawn.despawnLandedAI`), which frees
+the parking spot and lets respawn groups come back. The flag `<unit name>_landed` is set for your own triggers.
+DCS also reports an engine shutdown when a damaged aircraft loses its engines in flight; such aircraft are
+left alone until they crash, so the shooter keeps the kill.
 
-#### industry.config.factoryProduction
-How many ressources one factory produces each round/loop run. This is later increased by laboratories. This value is increased by 1 for all factories together (to avoid only 10th of increasement and add some variation to the numbers)
+### Stranded aircraft
+A damaged aircraft that does not crash — an emergency landing in a field, a damaged helicopter that set down, a
+wreck left on a runway — raises no further event and would block its respawn group forever. Every
+`respawn.deadCheckInterval` seconds Industry checks the AI aircraft of respawn groups. One that is damaged (it was
+hit, its AI aborted the mission or it lost life), on the ground and not moving at two checks in a row is removed
+and counts as lost. If it is still there at the next check, it is blown up. Players and ground vehicles are never
+touched. Switch it off with `respawn.removeStranded = false`.
 
-#### industry.config.storageCapacity
-How many ressources can be stored in each storage facility.
+### Search and rescue
+Place one helicopter group named `TPL-SAR-Red` (rescues red pilots) and one named `TPL-SAR-Blue` (rescues blue
+pilots) with *uncontrolled* ticked, usually parked at an airbase. They may belong to any coalition — put them on
+the neutral side so the rescue flights fly for neither side. The names can be changed in `csar.templates`.
 
-#### industry.config.productionLoopTime
-How many seconds does ech production cycle take. After this the ressources are added to the storages. If a factory was destroyed during a production cycle the ressources produced so far (in this factory) are lost.
+When a pilot (player or AI) lands with the parachute on land, the pilot becomes a soldier on the ground and a
+copy of the template is sent:
+1. **Start:** At an airbase the helicopter takes the free helicopter parking spot closest to the template (without
+   a free spot it shares the template's spot). Like its template it makes a cold start and taxis to the runway;
+   with `csar.hotStart` it starts with running engines.
+2. **Flight:** It flies `csar.altitude` meters above the ground to the pilot and lands where its AI finds a
+   landing site.
+3. **Boarding:** If it landed up to `csar.maxWalkDistance` meters away, the pilot walks over and boards. A
+   helicopter that landed farther away takes off and lands at the pilot again, up to `csar.landingAttempts`
+   landings.
+4. **Return:** It flies back to the template's airbase (or start position), lands and is removed.
 
-#### industry.config.respawnLoopTime
-How long does a respawn loop take. After this amount of seconds the four queues are checked and tried to respawn. See below for how queues work and retries/force.
+The rescue fails, and the helicopter flies home, when no landing is close enough, when the pilot does not reach the
+helicopter in time or when the pilot is killed. The soldier of a failed rescue stays where he is. A rescue
+helicopter that has not finished after `csar.timeout` seconds is removed. All steps are announced to the pilot's
+coalition and written to `dcs.log`.
 
-#### industry.config.labsboost
-A percentage value calculated from the base production of all factories together. So if we have 3 factories producing 30 tons each we have a base production of 90. so each laboratory increases production by 10% of 90 = 9 tons. Five labs would add 45 tons of produced ressources each turn.
+Scenery objects within `csar.clearRadius` meters of the pilot are removed (off by default; forests are not
+scenery objects). Players that shoot down a rescue helicopter cost their own coalition `csar.killTickets` tickets.
 
-#### industry.config.checkDeadGroupsTime
-This is more of a technical feature and usually does not need to be changed. This is how often (time in seconds) the script checks for dangling dead groups and adds them to the respawn queue. they still need to be configured as respawn group.
+### F10 menu
+Every player group gets *Industry → Get current statistics*, also in dynamic slots.
 
-#### industry.config.respawnRetriesOnQueue
-This is more of a technical feature and usually does not need to be changed. If a group cannot respawn, because one unit is not (finally) dead like a plane shot down but not already crashed. The respawn is retried and this is the maximum amount of retries.
+## Configuration
+`industry.setup()` takes one table. Everything you leave out uses these defaults. Unknown keys are reported
+in `dcs.log`.
 
-#### industry.config.winCountdownLength
-How many seconds does the RTB countdown take after one side has one (or mission is draw). Should be a multiple of 60 sec (one minute). Only the last seconds are count down and displayed. Until then every full minute is shown.
-
-#### industry.config.tickets
-With how many tickets does each side start. Tickets are reduced by one every minute. Tickets are reduced by one with each human player death and by destructions of labs, factories and storages (the infrastructure as primary mission goals).
+```lua
+industry.setup({
+    startResources = 200,
+    tickets = {
+        start = 100,          -- tickets per coalition
+        interval = 60,        -- both coalitions lose one ticket every interval seconds
+        low = 20,             -- flags ticketsLowRed / ticketsLowBlue below this value
+        winCountdown = 600,   -- seconds until the next mission is loaded
+    },
+    production = {
+        interval = 300,       -- seconds per production cycle
+        perFactory = 30,
+        base = 1,             -- added once per cycle
+        labBoost = 20,        -- percent of the factory production per laboratory
+        storageCapacity = 1000,
+    },
+    respawn = {
+        interval = 60,        -- seconds per respawn cycle
+        retries = 2,          -- cycles to wait for wrecks before the respawn is forced
+        deadCheckInterval = 300,
+        costs = { plane = 200, helicopter = 200, vehicle = 50, ship = 400 },
+        groups = {},
+        despawnLandedAI = true,
+        removeStranded = true, -- remove damaged aircraft stranded on the ground
+    },
+    logistics = {
+        convoyPrefix = "Convoy",
+        transportPrefix = "Transport",
+        tonsPerTruck = 100,
+        truckTypes = nil,     -- e.g. { "M 818", "KAMAZ Truck" }
+        tonsPerTransport = 800,
+        groups = {},
+    },
+    objectives = {
+        prefixes = { factory = "Factory", laboratory = "Laboratory", storage = "Storage",
+                     hq = "HQ", secondary = "Secondary" },
+        ticketCosts = { factory = 10, laboratory = 5, secondary = 1, hqFraction = 0.5 },
+        markers = true,
+    },
+    losses = {
+        playerTickets = 1,    -- tickets per destroyed player aircraft
+        vehicleSmoke = true,
+    },
+    csar = {
+        enabled = true,
+        templates = { red = "TPL-SAR-Red", blue = "TPL-SAR-Blue" },
+        hotStart = false,     -- true: start with running engines instead of a cold start
+        altitude = 150,       -- meters above the ground
+        waitTime = 1200,      -- seconds a landed helicopter waits for the pilot at most
+        maxWalkDistance = 800,
+        landingAttempts = 2,
+        timeout = 7200,       -- seconds until an unfinished rescue helicopter is removed
+        clearRadius = 0,
+        killTickets = 1,
+    },
+})
+```
 
 ## How it works
+
 ### Tickets
-There are two different types of ressources in Industry. The first one are *tons of production ressources* usually only called *ressources* and there are *tickets*. Tickets are limiting the time for one mission, so you server resets after a maximum number of minutes (measured in tickets). They are the main unit to focus on for winning the mission.
+Tickets limit the length of a mission. Both coalitions lose one ticket per `tickets.interval`. Destroyed player
+aircraft and objectives cost extra (see above). When one coalition has no tickets left, the coalition with more
+tickets wins (equal tickets: draw), a countdown runs and the next mission of the server's mission list is loaded.
 
-Tickets are reduced for both sides by one every minute. So if you set the *industry.config.tickets' config value to 120 the maximum time for the mission is 2 hours (120 minutes).
+### Respawn queues
+Each coalition has a queue for groups that cost resources and one for free respawns. Every `respawn.interval`
+seconds the first group of each queue is respawned if possible. The paid queue is strict on purpose: if the
+first group cannot be paid yet, the groups behind it wait. Otherwise cheap groups would use up all resources
+and expensive ones would never return.
 
-Each time a human pilot/player is killed (his plane, so ejecting does not help) the number of tickets for his coalition is reduced by one.
+A group is queued when its last unit is lost. It respawns only once DCS has removed it from the world, so a
+wreck falling from the sky is not replaced in mid-air; after `respawn.retries` cycles the respawn is forced.
+Every `respawn.deadCheckInterval` seconds Industry also looks for respawn groups that vanished without any event.
 
-Each time a storage, lab or factory is destroyed the amount of tickets is reduced too.
+## Flags
+| Flag                                   | Set when                                        |
+|----------------------------------------|-------------------------------------------------|
+| `<unit name>_destroyed`                | an objective was destroyed                       |
+| `red/blue` + `Factory/Laboratory/Storage/HQ/Secondary` + `Destroyed` (e.g. `blueStorageDestroyed`) | an objective of that kind was destroyed |
+| `ticketsLowRed`, `ticketsLowBlue`      | tickets fell to `tickets.low`                    |
+| `<unit name>_landed`                   | an AI aircraft shut down its engines on the ground |
+| `<group name>_respawned`               | a group was respawned                            |
+| `missionWinRed`, `missionWinBlue`, `missionWinNeutral` | the countdown after the end of the war ran out |
 
-If a HQ is destroyed the remaining tickets are reduced by half of the remaining tickets. So if 48 tickets where left, the tickets are reduced to 24, for example.
+Reset class flags such as `blueStorageDestroyed` in your triggers if you want to react to them more than once.
 
-Focussing on the mission goals (destroying strategic targets like HQs, labs, factories and storages) and shooting down players makes your side winning.
+### Ending the mission and mission goals
+When the countdown after the end of the war has run out, Industry sets `missionWinRed`, `missionWinBlue` or
+`missionWinNeutral` (draw) and loads the next mission of the server's mission list. Mission goals cannot be set
+from a script, so let the mission editor react to these flags:
 
-### Ressources
-Ressources are produced by factories, delivered by air-transport or convoys. The mission designer could also set up trains. This totally depends on the mision design.
+- **Triggers:** one trigger per flag, *ONCE*, condition *FLAG IS TRUE* (`missionWinRed`, ...), action
+  *END MISSION* with the winning coalition, plus sounds if you like.
+- **Mission goals** (for the debriefing result, campaigns and single player logbooks): a goal *Red Wins* for
+  RED, 100 points, condition *FLAG IS TRUE* `missionWinRed`, and the same for BLUE with `missionWinBlue`. A draw
+  needs no goal.
 
-Factory production is increased per lab by a configured percentage amount.
+Do not use Lua expressions on Industry internals in goals; they break when the internals change.
 
-Ressources are needed to respawn (AI) units that are queued for respawning.
-
-### Queues
-Industry uses four respawn queues. One for "free" (0 tons of ressources) respawns and one for respawns that cost more than 0 tons of ressources. And these two queues for red and blue side each.
-
-Respawns are triggered every 60 seconds, this is the default value and can be configured. The process checks the top of each of the four queues and respawns that group if the ressources are available. Then the group is removed from the top of the queue.
-
-New units to respawn (convoy or destroyed groups) are added to the end of the queue (FIFO principle) and wait for their turn.
-
-This is why there is a free queue for blue and red side - they should not wait for groups that can't be afford due to low ressources.
-
-### Find lost groups and retries
-The DCS AI has some very special cases where the unit does not exist any more but it is not triggered as a "death". So every 300 seconds / 5 minutes the script checks all respawn groups if there are no more units alive and tries to requeue them for respawn. Like a garbage collection.
-
-If a group is already in the respawn group and ready to respawn, but the group is not dead (still falling plane wreck from the sky) the respawn is postponed - this avoids removing the crashed plane from the middle of its descent and respawn it at its origin. This would look weird. So the respawn will be retried the next loop run. This is retried maximum of 2 times (can be configured), then the respawn is forced (due to crash landed dead but undead wrecks and such).
-
-### Pilot ejects
-One of these cases that are not trivial in some cases are pilot ejects from units that are not destroyed (crashed but not destroyed helicopters). Industry script does explode the plane after the pilot ejects to make sure the unit is dead afterwards. This is only done for auto respawning groups.
-
-### Respawning convoys or transports
-Just an idea for your mission design: set the respawn costs for convoys and transports to 0, so these can still respawn if this coalition is very low on ressources. Or the coalition would not be able to recover - and nothing respawns. The mission could get stuck or leave them helpless even if the player does nothing.
-
-## Custom Flags
-Some events set custom flags to be used outside the script and directly in the mission editor of DCS
-
-### Destroyed objectives
-For each destroyed objective a custom flag is set to true.
-
-```
-[name of object]_destroyed
-```
-
-[name of object] is the full name you gave the object in the edit that has been destroyed. Can be caught with a trigger/once.
-
-Example:
-```
-StorageBlue-1_destroyed // if the object was named "StorageBlue-1"
+## Script API
+```lua
+industry.setup(config)                   -- start Industry (once)
+industry.addResources("blue", 300)       -- add resources (coalition name or id)
+industry.addRespawnGroup("RedCAP-9", 400)
+industry.queueRespawn("RedCAP-9")        -- cost optional, 0 = free queue
+industry.convoyArrived("Convoy-Red-1")   -- what the convoy waypoint action calls
 ```
 
-Addidtionally a "class" type flag is set to true, too. For example these flags can be used to play custom sounds or add more events switched from the editor level.
+## Migrating from 1.x
+- Remove MIST from the mission and load `dist/industry.lua` instead of the old `industry.lua`.
+- Turn `industry.addRespawnGroup(...)` calls and `industry.config.*` assignments into one `industry.setup({...})` table.
+- Rename convoys to `Convoy...` and transports to `Transport...` (or list them in `logistics.groups`), then delete
+  the convoy waypoint scripts and the `_landed` triggers that called `addRessourcesTransport`.
+- Rename the rescue helicopters `blueSAR` / `redSAR` to `TPL-SAR-Blue` / `TPL-SAR-Red`.
+- Static objectives keep their names, but the prefix must now be at the start of the unit name.
 
-```
-[red/blue]FactoryDestroyed
-[red/blue]StorageDestroyed
-[red/blue]LaboratoryDestroyed
-[red/blue]HQDestroyed
-```
+## Development
+The sources are Lua modules in `src/industry`. They are bundled with Tarmac into `dist/industry.lua` by the
+`tarmac` tool, which also runs the tests in `test/` against a DCS API mock (Lua 5.1, no DCS needed).
 
-Example:
-
-```
-blueStorageDestroyed // if it was a blue storage that got destroyed
-```
-
-In the class type triggers do not forget the flag back to false or 0 after it got handled in the editor so it can be handled multiple times (if needed).
-
-### Plane landed
-If a plane landed and shut down its engines a flag with the name
-
-```
-[name of unit]_landed
+```bash
+git clone https://github.com/behringer24/DCS-Tarmac ../DCS-Tarmac
+go -C ../DCS-Tarmac install ./cmd/tarmac
+tarmac test
 ```
 
-[name of unit] is the full name you gave the unit (not the group!) in the editor. This can be used to set up air transports in the editor or trigger other events.
+`tarmac.json` expects the Tarmac checkout next to this repository (`../DCS-Tarmac`).
 
-### Group respawned
-If a group is respawned by the industry script a custom flag is set to true
+Never edit `dist/industry.lua` by hand; change the modules and run `tarmac build`.
 
-```
-[name of group]_respawned
-```
-
-If you use this event do not forget to set it back to false, so the event can be re-triggered.
-
-### Side won
-If one side loses because their tickets are down to zero first a custom flag is set to true
-
-```
-missionWinRed
-missionWinBlue
-missionWinNeutral
-```
-
-If both sides have 0 tickets left the flag missionWinNeutral is set. You should use these events to handle the end of the mission in the editor.
+Event handlers only read and record. Everything that changes the world — explosions, destroying or spawning
+objects, smoke — runs a second later through `tarmac.scheduler.after`, because DCS can trip over world changes
+made while it dispatches an event.
