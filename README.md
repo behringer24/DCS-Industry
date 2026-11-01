@@ -178,6 +178,19 @@ default of its class in `intel.threatDefaults` is the lower limit; `dcs.log` nam
 the DCS values at runtime, so the table has to follow DCS updates. Destroyed targets stay on the map, marked
 destroyed with a grey circle. A site that is rebuilt (respawn) has to be found again.
 
+Air defence sites may move. The map shows where a site was spotted, at the time in its mark, until someone looks
+again:
+
+- **Spotted elsewhere:** a site seen more than `intel.moveDistance` (500 m) away from its reported position is
+  redrawn there. AI units update the map silently, players get a hint and report it like a new target
+  (*1 position updated*).
+- **Position found empty:** an observer who could spot the site at its reported position (same range, light,
+  weather and terrain rules) while no unit of it is left there has the report removed. AI units do it right away
+  and the coalition hears about it, players get a hint (*no longer at the reported position*) and a mark of their
+  own until they send the report.
+
+The script never moves or removes a mark because it knows where the site really is; someone has to look.
+
 `dcs.log` tells with the prefix `[industry.intel]` who spotted what with the full range calculation, near misses
 (terrain, too high, clouds, just out of range; `intel.verbose`), reports, lost recon packages and a summary every
 `intel.summaryInterval` seconds — so the parameters can be tuned with the log of a real mission.
@@ -256,6 +269,7 @@ industry.setup({
         airDefenceAttributes = { ["Air Defence"] = true, ["EWR"] = true },
         airDefenceRadars = { ["SAM SR"] = true, ["SAM TR"] = true, ["EWR"] = true },
         airDefenceShare = 0.5, -- share of air defence units that makes a group without radar a site
+        moveDistance = 500,   -- meters a site moves until a new sighting redraws it
         threatRings = true,
         threatRanges = { ["CHAP_TorM2"] = 16000, --[[ ... per type, see src/industry/config.lua ]] },
         threatDefaults = { ["LR SAM"] = 40000, ["MR SAM"] = 25000, ["SR SAM"] = 8000, ["AAA"] = 3000 },

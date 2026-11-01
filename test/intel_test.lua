@@ -111,7 +111,7 @@ test("the recon report puts the targets on the coalition map", function()
     expect.equal(mark.coalition, 2)
     expect.equal(mark.text, "Factory (spotted 12:00)")
     expect.equal(intel.package("BlueStrike-1-1").count, 0)
-    expect.truthy(logged("blue: Hornet (BlueStrike-1-1) reported to HQ: 1 new, 0 already known"))
+    expect.truthy(logged("blue: Hornet (BlueStrike-1-1) reported to HQ: 1 new, 0 moved, 0 no longer there, 0 already known"))
 end)
 
 test("a reported target is not spotted again and an empty report is acknowledged", function()
@@ -188,6 +188,77 @@ test("a rebuilt site must be found again", function()
     expect.truthy(logged("report of SAM site (medium range) SAM-Red-1 removed: the site was rebuilt"))
     dcs.advance(10)
     expect.notNil(intel.known(2)["group:SAM-Red-1"], "the recon aircraft is still there")
+end)
+
+-- moves all units of a group to x, z
+local function moveGroup(groupName, x, z)
+    for _, unit in ipairs(Group.getByName(groupName):getUnits()) do
+        put(unit, x, z)
+    end
+end
+
+test("a site that moved is redrawn where it is spotted again", function()
+    local report = intel.known(2)["group:SAM-Red-1"]
+    local oldMark, oldRing = report.markId, report.ringId
+    moveGroup("SAM-Red-1", 30200, 200)
+    dcs.advance(10)
+    expect.equal(report.markId, oldMark, "a few hundred meters change nothing")
+
+    moveGroup("SAM-Red-1", 31500, 2000)
+    dcs.advance(10)
+    expect.equal(intel.known(2)["group:SAM-Red-1"], report)
+    expect.equal(report.point.x, 31500)
+    expect.isNil(dcs.marks[oldMark])
+    expect.isNil(dcs.marks[oldRing])
+    expect.equal(dcs.marks[report.markId].point.x, 31500)
+    expect.equal(dcs.marks[report.ringId].point.x, 31500)
+    expect.equal(dcs.marks[report.ringId].radius, 35000)
+    expect.truthy(logged("blue: SAM site (medium range) SAM-Red-1 moved 2.5 km, map updated (BlueRecon-1-1 (Tornado IDS, recon))"))
+    expect.equal(#dcs.findMessages("SAM site (medium range) moved"), 0, "a move only changes the map")
+end)
+
+test("a reported position found empty is removed, the site found again elsewhere", function()
+    local report = intel.known(2)["group:SAM-Red-1"]
+    local mark, ring = report.markId, report.ringId
+    -- 16.9 km from the recon aircraft, the reported position 13.1 km
+    moveGroup("SAM-Red-1", 33000, 9000)
+    dcs.advance(10)
+    expect.isNil(intel.known(2)["group:SAM-Red-1"])
+    expect.isNil(dcs.marks[mark])
+    expect.isNil(dcs.marks[ring])
+    expect.truthy(logged("blue: BlueRecon-1-1 (Tornado IDS, recon) spotted the reported position of SAM site (medium range) SAM-Red-1 at 13.1 km"))
+    expect.truthy(logged("blue: SAM site (medium range) SAM-Red-1 is no longer at the reported position, removed from the map"))
+    expect.equal(#dcs.findMessages("HQ: No longer at the reported position, removed from the map: SAM site (medium range)."), 1)
+
+    put(dcs.unit("BlueRecon-1-1"), 26000, 9000, 6000)
+    dcs.advance(10)
+    expect.equal(intel.known(2)["group:SAM-Red-1"].point.z, 9000, "found again at the new position")
+end)
+
+test("players report moved sites and empty positions with their recon report", function()
+    industry.config.intel.aiRecon = false
+    enterSlot()
+    moveGroup("SAM-Red-1", 36000, 9000)
+    put(player, 40000, 9000, 1000)
+    dcs.advance(10)
+    expect.equal(#dcs.findMessages("Recon: SAM site (medium range) spotted, bearing 180 for 4 km."), 1)
+    reportToHQ()
+    expect.equal(#dcs.findMessages("HQ: Recon report received, 1 position updated."), 1)
+    expect.equal(intel.known(2)["group:SAM-Red-1"].point.x, 36000)
+
+    moveGroup("SAM-Red-1", 60000, 40000)
+    dcs.advance(10)
+    expect.equal(#dcs.findMessages("Recon: SAM site (medium range) no longer at the reported position, bearing 180 for 4 km."), 1)
+    local item = intel.package("BlueStrike-1-1").items["empty:group:SAM-Red-1"]
+    expect.equal(dcs.marks[item.markId].text, "SAM site (medium range) not found 12:02, not reported")
+    expect.notNil(intel.known(2)["group:SAM-Red-1"], "the HQ does not know yet")
+    reportToHQ()
+    expect.equal(#dcs.findMessages("HQ: Recon report received, 1 target no longer at the reported position."), 1)
+    expect.isNil(intel.known(2)["group:SAM-Red-1"])
+    expect.isNil(dcs.marks[item.markId])
+
+    dcs.kill("BlueStrike-1-1")
+    industry.config.intel.aiRecon = true
 end)
 
 test("at night only types with night vision see, and not as far", function()

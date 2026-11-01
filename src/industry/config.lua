@@ -118,6 +118,10 @@ config.defaults = {
         airDefenceAttributes = { ["Air Defence"] = true, ["EWR"] = true },
         airDefenceRadars = { ["SAM SR"] = true, ["SAM TR"] = true, ["EWR"] = true },
         airDefenceShare = 0.5,
+        -- meters an air defence site has to move away from its reported
+        -- position until a new sighting redraws it; a reported position
+        -- without any unit of the site within this distance can be found empty
+        moveDistance = 500,
         -- threat circles around reported air defence sites
         threatRings = true,
         -- threat range in meters per air defence type, the circles DCS draws

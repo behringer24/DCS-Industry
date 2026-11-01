@@ -1751,6 +1751,10 @@ config.defaults = {
         airDefenceAttributes = { ["Air Defence"] = true, ["EWR"] = true },
         airDefenceRadars = { ["SAM SR"] = true, ["SAM TR"] = true, ["EWR"] = true },
         airDefenceShare = 0.5,
+        -- meters an air defence site has to move away from its reported
+        -- position until a new sighting redraws it; a reported position
+        -- without any unit of the site within this distance can be found empty
+        moveDistance = 500,
         -- threat circles around reported air defence sites
         threatRings = true,
         -- threat range in meters per air defence type, the circles DCS draws
@@ -3474,6 +3478,10 @@ __modules["industry.intel"] = function(...)
 --     package is lost with the aircraft or when the player leaves it.
 --   * Without HQ a coalition is blind: when its last HQ is destroyed, all its
 --     reports, packages and map marks are gone and nobody spots anything.
+--   * Air defence sites may move. One spotted again away from its reported
+--     position is redrawn there; an observer who looks at a reported
+--     position and finds it empty has the report removed. Players send both
+--     to HQ with their recon report like new targets.
 -- Whether an observer spots a target depends on the distance, the line of
 -- sight over the terrain, the kind of observer (ground unit, aircraft,
 -- reconnaissance aircraft, height above ground), daylight, visibility (fog,
@@ -3499,7 +3507,14 @@ local hqLost = { [1] = false, [2] = false }
 local nearMisses = {}               -- [observer|target] = time of the last log line
 local pendingGroups = {}            -- [groupName] = true while a birth check is scheduled
 local crewless = {}                 -- [unitName] = true after the crew ejected or died
-local stats = { checks = 0, pairs = 0, lineOfSight = 0, observers = { [1] = {}, [2] = {} } }
+local stats = {
+    checks = 0, pairs = 0, lineOfSight = 0, observers = { [1] = {}, [2] = {} },
+    -- since the start: reports moved to a new position, reports found empty
+    moved = { [1] = 0, [2] = 0 }, cleared = { [1] = 0, [2] = 0 },
+}
+
+-- key prefix of a reported position that an observer may find empty
+local EMPTY = "empty:"
 
 -- a target is looked at this many meters above its base
 local STATIC_HEIGHT = 10
@@ -3542,6 +3557,11 @@ local function distance3D(a, b)
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 end
 
+local function distance2D(a, b)
+    local dx, dz = a.x - b.x, a.z - b.z
+    return math.sqrt(dx * dx + dz * dz)
+end
+
 -- True bearing in degrees from one map point to another (x north, z east).
 local function bearing(from, to)
     local degrees = math.deg(math.atan2(to.z - from.z, to.x - from.x))
@@ -3571,6 +3591,17 @@ local function groupPoint(groupName)
         return nil
     end
     return { x = sx / n, y = sy / n, z = sz / n }
+end
+
+-- True when a unit of the group is within radius meters of the point.
+local function unitNear(groupName, point, radius)
+    for _, unit in ipairs(object.call(Group.getByName(groupName), "getUnits") or {}) do
+        local p = object.point(unit)
+        if p and distance2D(p, point) < radius then
+            return true
+        end
+    end
+    return false
 end
 
 -- The air defence units of a group and the attributes that made them so.
@@ -3779,20 +3810,56 @@ end
 
 -- Knowledge -----------------------------------------------------------------
 
---- Adds a sighting to what the HQ of a coalition knows and puts it on the
--- map. Returns false if it was known already.
-local function learn(coalitionId, target, sighting)
-    if known[coalitionId][target.key] then
-        return false
-    end
-    local report = { target = target, seenAt = sighting.seenAt, point = sighting.point, by = sighting.by }
-    known[coalitionId][target.key] = report
-    draw(coalitionId, report)
+-- Drops what the players of a coalition collected about a target.
+local function dropFromPackages(coalitionId, key)
     for _, package in pairs(packages) do
         if package.coalition == coalitionId then
-            dropItem(package, target.key)
+            dropItem(package, key)
+            dropItem(package, EMPTY .. key)
         end
     end
+end
+
+--- Adds a sighting to what the HQ of a coalition knows and puts it on the
+-- map. A known site seen away from its reported position is redrawn where
+-- it was seen. Returns "new", "moved" or nil when the HQ learned nothing.
+local function learn(coalitionId, target, sighting)
+    local report = known[coalitionId][target.key]
+    if report then
+        local moved = distance2D(report.point, sighting.point)
+        if target.destroyed or sighting.seenAt < report.seenAt or moved < cfg.intel.moveDistance then
+            return nil
+        end
+        erase(report)
+        report.seenAt, report.point, report.by = sighting.seenAt, sighting.point, sighting.by
+        draw(coalitionId, report)
+        dropFromPackages(coalitionId, target.key)
+        stats.moved[coalitionId] = stats.moved[coalitionId] + 1
+        log:info("%s: %s %s moved %s, map updated (%s)", side.name(coalitionId), target.label, target.name, km(moved),
+            sighting.by)
+        return "moved"
+    end
+    report = { target = target, seenAt = sighting.seenAt, point = sighting.point, by = sighting.by }
+    known[coalitionId][target.key] = report
+    draw(coalitionId, report)
+    dropFromPackages(coalitionId, target.key)
+    return "new"
+end
+
+--- Removes a report whose position an observer found empty. point is the
+-- reported position the observer looked at: a report that was moved or
+-- renewed since has another point table and stays. Returns true if removed.
+local function clearPosition(coalitionId, target, point, by)
+    local report = known[coalitionId][target.key]
+    if report == nil or report.point ~= point then
+        return false
+    end
+    erase(report)
+    known[coalitionId][target.key] = nil
+    dropFromPackages(coalitionId, target.key)
+    stats.cleared[coalitionId] = stats.cleared[coalitionId] + 1
+    log:info("%s: %s %s is no longer at the reported position, removed from the map (%s)", side.name(coalitionId),
+        target.label, target.name, by)
     return true
 end
 
@@ -3951,23 +4018,45 @@ local function collectObservers(coalitionId)
 end
 
 -- Targets the coalition does not know yet, with their current position.
+-- What the observers of a coalition look for: enemy targets their HQ does
+-- not know, known sites that moved away from their reported position, and
+-- reported positions without any unit of the site left (spots), which an
+-- observer can find empty.
 local function candidates(coalitionId)
     local enemy = side.enemy(coalitionId)
-    local list = {}
+    local list, spots = {}, {}
     for key, target in pairs(targets) do
-        if target.coalition == enemy and not target.destroyed and not known[coalitionId][key] then
+        if target.coalition == enemy and not target.destroyed then
+            local report = known[coalitionId][key]
             if target.groupName then
                 target.point = groupPoint(target.groupName)
             end
-            if target.point then
+            local moved = report ~= nil and target.groupName ~= nil and target.point ~= nil
+                and distance2D(report.point, target.point) >= cfg.intel.moveDistance
+            if target.point and (report == nil or moved) then
                 target.view = raised(target.point, target.height)
                 target.visibility = sight.visibility(target.view)
                 list[#list + 1] = target
             end
+            if moved and not unitNear(target.groupName, report.point, cfg.intel.moveDistance) then
+                local view = raised(report.point, target.height)
+                spots[#spots + 1] = {
+                    key = EMPTY .. key,
+                    kind = target.kind,
+                    label = "the reported position of " .. target.label,
+                    name = target.name,
+                    target = target,
+                    point = report.point,
+                    view = view,
+                    visibility = sight.visibility(view),
+                }
+            end
         end
     end
-    table.sort(list, function(a, b) return a.key < b.key end)
-    return list
+    local byKey = function(a, b) return a.key < b.key end
+    table.sort(list, byKey)
+    table.sort(spots, byKey)
+    return list, spots
 end
 
 -- Detection -----------------------------------------------------------------
@@ -4039,24 +4128,49 @@ local function sees(observer, target)
     return true, distance
 end
 
-local function notifyPlayer(observer, spotted)
-    local lines = {}
-    for _, entry in ipairs(spotted) do
-        lines[#lines + 1] = string.format("Recon: %s spotted, bearing %03d for %d km.", entry.target.label,
-            bearing(observer.point, entry.target.point), math.floor(entry.distance / 1000 + 0.5))
-    end
-    lines[#lines + 1] = "Send your recon report to HQ (F10 > HQ)."
-    trigger.action.outTextForGroup(observer.groupId, table.concat(lines, "\n"), 15)
+local function hint(observer, text, point, distance)
+    return string.format("Recon: %s, bearing %03d for %d km.", text, bearing(observer.point, point),
+        math.floor(distance / 1000 + 0.5))
 end
 
-local function announceReports(coalitionId, labels)
-    local text
-    if #labels <= 3 then
-        text = "HQ: New reconnaissance on the map: " .. table.concat(labels, ", ") .. "."
-    else
-        text = string.format("HQ: Our forces reported %d new targets, see the map.", #labels)
+local function notifyPlayer(observer, hints)
+    hints[#hints + 1] = "Send your recon report to HQ (F10 > HQ)."
+    trigger.action.outTextForGroup(observer.groupId, table.concat(hints, "\n"), 15)
+end
+
+-- Moves to a new position only change the map; new targets and emptied
+-- positions are announced.
+local function announceReports(coalitionId, news)
+    local lines = {}
+    if #news.new > 3 then
+        lines[#lines + 1] = string.format("HQ: Our forces reported %d new targets, see the map.", #news.new)
+    elseif #news.new > 0 then
+        lines[#lines + 1] = "HQ: New reconnaissance on the map: " .. table.concat(news.new, ", ") .. "."
     end
-    trigger.action.outTextForCoalition(coalitionId, text, 10)
+    if #news.gone > 3 then
+        lines[#lines + 1] = string.format("HQ: %d targets are no longer at their reported position.", #news.gone)
+    elseif #news.gone > 0 then
+        lines[#lines + 1] = "HQ: No longer at the reported position, removed from the map: "
+            .. table.concat(news.gone, ", ") .. "."
+    end
+    if #lines > 0 then
+        trigger.action.outTextForCoalition(coalitionId, table.concat(lines, "\n"), 10)
+    end
+end
+
+-- True when the player already collected this key since the last report.
+local function pending(observer, key)
+    local package = observer.player and packages[observer.name]
+    return package ~= nil and not package.lost and package.items[key] ~= nil
+end
+
+-- Puts a sighting into the recon package of a player, with a mark only his
+-- group sees.
+local function collect(observer, key, item, text)
+    local own = packageOf(observer)
+    item.markId = marks.toGroup(own.groupId, text, item.point)
+    own.items[key] = item
+    own.count = own.count + 1
 end
 
 local function cleanupPackages()
@@ -4080,48 +4194,59 @@ local function checkCoalition(coalitionId)
     if not intel.hqAlive(coalitionId) then
         return
     end
-    local list = candidates(coalitionId)
+    local list, spots = candidates(coalitionId)
     local observers = collectObservers(coalitionId)
-    if #list == 0 then
+    if #list == 0 and #spots == 0 then
         return
     end
-    local reported = {}
+    local news = { new = {}, moved = {}, gone = {} }
     local now = timer.getAbsTime()
     for _, observer in ipairs(observers) do
-        local spotted = {}
+        local hints = {}
         for _, target in ipairs(list) do
-            local package = observer.player and packages[observer.name]
-            local pending = package and not package.lost and package.items[target.key]
-            if not known[coalitionId][target.key] and not pending then
+            if not pending(observer, target.key) then
                 local seen, distance = sees(observer, target)
                 if seen then
-                    local sighting = { seenAt = now, point = target.point, by = describeObserver(observer) }
+                    local sighting = { target = target, seenAt = now, point = target.point, by = describeObserver(observer) }
                     if observer.player then
-                        local own = packageOf(observer)
-                        own.items[target.key] = {
-                            target = target,
-                            seenAt = now,
-                            point = target.point,
-                            by = sighting.by,
-                            markId = marks.toGroup(own.groupId, string.format("%s spotted %s, not reported",
-                                target.label, clock(now)), target.point),
-                        }
-                        own.count = own.count + 1
-                        spotted[#spotted + 1] = { target = target, distance = distance }
-                    elseif learn(coalitionId, target, sighting) then
-                        log:info("%s: reported to HQ by %s", side.name(coalitionId), sighting.by)
-                        reported[#reported + 1] = target.label
+                        collect(observer, target.key, sighting,
+                            string.format("%s spotted %s, not reported", target.label, clock(now)))
+                        hints[#hints + 1] = hint(observer, target.label .. " spotted", target.point, distance)
+                    else
+                        local result = learn(coalitionId, target, sighting)
+                        if result == "new" then
+                            log:info("%s: reported to HQ by %s", side.name(coalitionId), sighting.by)
+                        end
+                        if result then
+                            news[result][#news[result] + 1] = target.label
+                        end
                     end
                 end
             end
         end
-        if #spotted > 0 then
-            notifyPlayer(observer, spotted)
+        for _, spot in ipairs(spots) do
+            -- the report may have moved or gone earlier in this check
+            local report = known[coalitionId][spot.target.key]
+            if report and report.point == spot.point and not pending(observer, spot.key) then
+                local seen, distance = sees(observer, spot)
+                if seen then
+                    local by = describeObserver(observer)
+                    if observer.player then
+                        collect(observer, spot.key, { target = spot.target, seenAt = now, point = spot.point, by = by, empty = true },
+                            string.format("%s not found %s, not reported", spot.target.label, clock(now)))
+                        hints[#hints + 1] = hint(observer, spot.target.label .. " no longer at the reported position",
+                            spot.point, distance)
+                    elseif clearPosition(coalitionId, spot.target, spot.point, by) then
+                        news.gone[#news.gone + 1] = spot.target.label
+                    end
+                end
+            end
+        end
+        if #hints > 0 then
+            notifyPlayer(observer, hints)
         end
     end
-    if #reported > 0 then
-        announceReports(coalitionId, reported)
-    end
+    announceReports(coalitionId, news)
 end
 
 --- One check of what every observer of both coalitions can see.
@@ -4142,7 +4267,7 @@ function intel.report(groupName, groupId, coalitionId)
         trigger.action.outTextForGroup(groupId, "HQ is not responding.", 10)
         return 0
     end
-    local new, already, senders = 0, 0, {}
+    local counts, senders = { new = 0, moved = 0, gone = 0, known = 0 }, {}
     for _, unit in ipairs(object.call(Group.getByName(groupName), "getUnits") or {}) do
         local unitName = object.name(unit)
         local package = unitName and packages[unitName]
@@ -4150,12 +4275,28 @@ function intel.report(groupName, groupId, coalitionId)
             dropPackage(unitName, package.lost)
         elseif package and package.count > 0 then
             senders[#senders + 1] = string.format("%s (%s)", tostring(package.playerName), unitName)
+            local sightings, empties = {}, {}
             for key, item in pairs(package.items) do
-                if learn(coalitionId, item.target, item) then
-                    new = new + 1
-                else
-                    already = already + 1
+                local list = item.empty and empties or sightings
+                list[#list + 1] = { key = key, item = item }
+            end
+            -- sightings first: a site seen at its new position makes the
+            -- empty old position obsolete (learn drops it from the package)
+            for _, entry in ipairs(sightings) do
+                local result = learn(coalitionId, entry.item.target, entry.item)
+                counts[result or "known"] = counts[result or "known"] + 1
+            end
+            for _, entry in ipairs(empties) do
+                local item = entry.item
+                if package.items[entry.key] == item then
+                    if clearPosition(coalitionId, item.target, item.point, item.by) then
+                        counts.gone = counts.gone + 1
+                    else
+                        counts.known = counts.known + 1
+                    end
                 end
+            end
+            for key in pairs(package.items) do
                 dropItem(package, key)
             end
         end
@@ -4165,14 +4306,20 @@ function intel.report(groupName, groupId, coalitionId)
         log:info("%s: %s sent an empty recon report", side.name(coalitionId), groupName)
         return 0
     end
-    local text = string.format("HQ: Recon report received, %d new %s on the map", new, new == 1 and "target" or "targets")
-    if already > 0 then
-        text = text .. string.format(", %d already known", already)
+    local parts = {}
+    local function add(count, singular, plural)
+        if count > 0 then
+            parts[#parts + 1] = string.format("%d %s", count, count == 1 and singular or plural)
+        end
     end
-    trigger.action.outTextForGroup(groupId, text .. ".", 10)
-    log:info("%s: %s reported to HQ: %d new, %d already known", side.name(coalitionId), table.concat(senders, ", "),
-        new, already)
-    return new
+    add(counts.new, "new target on the map", "new targets on the map")
+    add(counts.moved, "position updated", "positions updated")
+    add(counts.gone, "target no longer at the reported position", "targets no longer at their reported position")
+    add(counts.known, "already known", "already known")
+    trigger.action.outTextForGroup(groupId, "HQ: Recon report received, " .. table.concat(parts, ", ") .. ".", 10)
+    log:info("%s: %s reported to HQ: %d new, %d moved, %d no longer there, %d already known", side.name(coalitionId),
+        table.concat(senders, ", "), counts.new, counts.moved, counts.gone, counts.known)
+    return counts.new
 end
 
 -- Queries -------------------------------------------------------------------
@@ -4233,10 +4380,11 @@ function intel.summary()
         end
         local observers = stats.observers[coalitionId]
         log:info("summary %s: HQ %s, observers %d players / %d AI aircraft / %d ground, %d of %d enemy targets "
-            .. "reported (%d enemy targets destroyed), %d recon packages with %d targets not reported",
+            .. "reported (%d enemy targets destroyed), %d recon packages with %d targets not reported, "
+            .. "since the start %d reports moved and %d found empty",
             side.name(coalitionId), intel.hqAlive(coalitionId) and (hasHQ[coalitionId] and "ok" or "none in the mission")
             or "lost", observers.players or 0, observers.aircraft or 0, observers.ground or 0, reported, total, destroyed,
-            packageCount, items)
+            packageCount, items, stats.moved[coalitionId], stats.cleared[coalitionId])
     end
     stats.checks, stats.pairs, stats.lineOfSight = 0, 0, 0
 end
