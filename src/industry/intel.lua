@@ -3,8 +3,9 @@
 -- report reached the own HQ:
 --   * AI units (intel.aiRecon) report what they see right away.
 --   * Players get a hint and collect what they spotted in a recon package,
---     which they send to HQ with the F10 menu "HQ > Send recon report". The
---     package is lost with the aircraft or when the player leaves it.
+--     which they send to HQ with the F10 menu "HQ > Send recon report" or
+--     hand in after landing at a friendly base (debrief). The package is
+--     lost with the aircraft or when the player leaves it.
 --   * Without HQ a coalition is blind: when its last HQ is destroyed, all its
 --     reports, packages and map marks are gone and nobody spots anything.
 --   * Air defence sites may move. One spotted again away from its reported
@@ -36,6 +37,7 @@ local hqLost = { [1] = false, [2] = false }
 local nearMisses = {}               -- [observer|target] = time of the last log line
 local pendingGroups = {}            -- [groupName] = true while a birth check is scheduled
 local crewless = {}                 -- [unitName] = true after the crew ejected or died
+local basedAt = {}                  -- [unitName] = { name, since } of the friendly or neutral base it landed at
 local stats = {
     checks = 0, pairs = 0, lineOfSight = 0, observers = { [1] = {}, [2] = {} },
     -- since the start: reports moved to a new position, reports found empty
@@ -55,6 +57,8 @@ local NEAR_MISS_FACTOR = 1.25
 -- seconds before the same near miss (observer, target, reason) of an
 -- aircraft is logged again; ground units do not move, theirs only once
 local NEAR_MISS_REPEAT = 600
+-- seconds a player has to be on the ground at a friendly base to debrief
+local DEBRIEF_DELAY = 20
 
 local THREAT_COLOR = { 1, 0, 0, 0.8 }
 local THREAT_FILL = { 1, 0, 0, 0.08 }
@@ -663,7 +667,7 @@ local function hint(observer, text, point, distance)
 end
 
 local function notifyPlayer(observer, hints)
-    hints[#hints + 1] = "Send your recon report to HQ (F10 > HQ)."
+    hints[#hints + 1] = "Send your recon report to HQ (F10 > HQ) or land at a friendly base."
     trigger.action.outTextForGroup(observer.groupId, table.concat(hints, "\n"), 15)
 end
 
@@ -778,63 +782,43 @@ local function checkCoalition(coalitionId)
     announceReports(coalitionId, news)
 end
 
---- One check of what every observer of both coalitions can see.
-function intel.check()
-    stats.checks = stats.checks + 1
-    cleanupPackages()
-    for _, coalitionId in ipairs(side.BOTH) do
-        checkCoalition(coalitionId)
-    end
-end
-
 -- Reports from players ------------------------------------------------------
 
---- Sends the recon packages of all players in a group to their HQ (F10
--- menu). Returns the number of targets that were new to the HQ.
-function intel.report(groupName, groupId, coalitionId)
-    if not intel.hqAlive(coalitionId) then
-        trigger.action.outTextForGroup(groupId, "HQ is not responding.", 10)
-        return 0
+local function newCounts()
+    return { new = 0, moved = 0, gone = 0, known = 0 }
+end
+
+-- Hands the recon package of a player unit to the HQ and adds the outcome
+-- to counts.
+local function deliver(package, coalitionId, counts)
+    local sightings, empties = {}, {}
+    for key, item in pairs(package.items) do
+        local list = item.empty and empties or sightings
+        list[#list + 1] = { key = key, item = item }
     end
-    local counts, senders = { new = 0, moved = 0, gone = 0, known = 0 }, {}
-    for _, unit in ipairs(object.call(Group.getByName(groupName), "getUnits") or {}) do
-        local unitName = object.name(unit)
-        local package = unitName and packages[unitName]
-        if package and package.lost then
-            dropPackage(unitName, package.lost)
-        elseif package and package.count > 0 then
-            senders[#senders + 1] = string.format("%s (%s)", tostring(package.playerName), unitName)
-            local sightings, empties = {}, {}
-            for key, item in pairs(package.items) do
-                local list = item.empty and empties or sightings
-                list[#list + 1] = { key = key, item = item }
-            end
-            -- sightings first: a site seen at its new position makes the
-            -- empty old position obsolete (learn drops it from the package)
-            for _, entry in ipairs(sightings) do
-                local result = learn(coalitionId, entry.item.target, entry.item)
-                counts[result or "known"] = counts[result or "known"] + 1
-            end
-            for _, entry in ipairs(empties) do
-                local item = entry.item
-                if package.items[entry.key] == item then
-                    if clearPosition(coalitionId, item.target, item.point, item.by) then
-                        counts.gone = counts.gone + 1
-                    else
-                        counts.known = counts.known + 1
-                    end
-                end
-            end
-            for key in pairs(package.items) do
-                dropItem(package, key)
+    -- sightings first: a site seen at its new position makes the empty old
+    -- position obsolete (learn drops it from the package)
+    for _, entry in ipairs(sightings) do
+        local result = learn(coalitionId, entry.item.target, entry.item)
+        counts[result or "known"] = counts[result or "known"] + 1
+    end
+    for _, entry in ipairs(empties) do
+        local item = entry.item
+        if package.items[entry.key] == item then
+            if clearPosition(coalitionId, item.target, item.point, item.by) then
+                counts.gone = counts.gone + 1
+            else
+                counts.known = counts.known + 1
             end
         end
     end
-    if #senders == 0 then
-        trigger.action.outTextForGroup(groupId, "HQ: Copy, nothing new to report.", 10)
-        log:info("%s: %s sent an empty recon report", side.name(coalitionId), groupName)
-        return 0
+    for key in pairs(package.items) do
+        dropItem(package, key)
     end
+end
+
+-- "2 new targets on the map, 1 position updated"
+local function countsText(counts)
     local parts = {}
     local function add(count, singular, plural)
         if count > 0 then
@@ -845,10 +829,73 @@ function intel.report(groupName, groupId, coalitionId)
     add(counts.moved, "position updated", "positions updated")
     add(counts.gone, "target no longer at the reported position", "targets no longer at their reported position")
     add(counts.known, "already known", "already known")
-    trigger.action.outTextForGroup(groupId, "HQ: Recon report received, " .. table.concat(parts, ", ") .. ".", 10)
-    log:info("%s: %s reported to HQ: %d new, %d moved, %d no longer there, %d already known", side.name(coalitionId),
-        table.concat(senders, ", "), counts.new, counts.moved, counts.gone, counts.known)
+    return table.concat(parts, ", ")
+end
+
+local function countsLog(counts)
+    return string.format("%d new, %d moved, %d no longer there, %d already known", counts.new, counts.moved,
+        counts.gone, counts.known)
+end
+
+--- Sends the recon packages of all players in a group to their HQ (F10
+-- menu). Returns the number of targets that were new to the HQ.
+function intel.report(groupName, groupId, coalitionId)
+    if not intel.hqAlive(coalitionId) then
+        trigger.action.outTextForGroup(groupId, "HQ is not responding.", 10)
+        return 0
+    end
+    local counts, senders = newCounts(), {}
+    for _, unit in ipairs(object.call(Group.getByName(groupName), "getUnits") or {}) do
+        local unitName = object.name(unit)
+        local package = unitName and packages[unitName]
+        if package and package.lost then
+            dropPackage(unitName, package.lost)
+        elseif package and package.count > 0 then
+            senders[#senders + 1] = string.format("%s (%s)", tostring(package.playerName), unitName)
+            deliver(package, coalitionId, counts)
+        end
+    end
+    if #senders == 0 then
+        trigger.action.outTextForGroup(groupId, "HQ: Copy, nothing new to report.", 10)
+        log:info("%s: %s sent an empty recon report", side.name(coalitionId), groupName)
+        return 0
+    end
+    trigger.action.outTextForGroup(groupId, "HQ: Recon report received, " .. countsText(counts) .. ".", 10)
+    log:info("%s: %s reported to HQ: %s", side.name(coalitionId), table.concat(senders, ", "), countsLog(counts))
     return counts.new
+end
+
+-- A player who is on the ground at a base of his coalition or a neutral one
+-- for DEBRIEF_DELAY seconds is debriefed: his recon package reaches HQ
+-- without the radio. The delay keeps a crash right after touchdown from
+-- delivering; time instead of speed, as a parked aircraft moves with its
+-- carrier.
+local function debriefLanded()
+    local now = timer.getTime()
+    for unitName, package in pairs(packages) do
+        local at = basedAt[unitName]
+        if at and now - at.since >= DEBRIEF_DELAY and not package.lost and package.count > 0
+                and not crewless[unitName] and intel.hqAlive(package.coalition) then
+            local unit = Unit.getByName(unitName)
+            if unit and object.call(unit, "inAir") == false then
+                local counts = newCounts()
+                deliver(package, package.coalition, counts)
+                trigger.action.outTextForGroup(package.groupId, "HQ: Debrief received, " .. countsText(counts) .. ".", 10)
+                log:info("%s: %s (%s) debriefed at %s: %s", side.name(package.coalition), tostring(package.playerName),
+                    unitName, at.name, countsLog(counts))
+            end
+        end
+    end
+end
+
+--- One check of what every observer of both coalitions can see.
+function intel.check()
+    stats.checks = stats.checks + 1
+    cleanupPackages()
+    debriefLanded()
+    for _, coalitionId in ipairs(side.BOTH) do
+        checkCoalition(coalitionId)
+    end
 end
 
 -- Queries -------------------------------------------------------------------
@@ -937,6 +984,17 @@ local function checkGroup(groupName)
     end
 end
 
+-- Where and since when an aircraft is on the ground at a base when it landed
+-- or was born there, if the base does not belong to the enemy.
+local function friendlyBase(event)
+    local base = event.place
+    local coalitionId = object.coalition(event.initiator)
+    if base == nil or coalitionId == nil or object.coalition(base) == side.enemy(coalitionId) then
+        return nil
+    end
+    return { name = tostring(object.name(base)), since = timer.getTime() }
+end
+
 local function onBirth(event)
     local unit = event.initiator
     local unitName = object.name(unit)
@@ -945,6 +1003,7 @@ local function onBirth(event)
     end
     if unitName then
         crewless[unitName] = nil
+        basedAt[unitName] = object.isAircraft(unit) and friendlyBase(event) or nil
     end
     if object.unitCategory(unit) ~= Unit.Category.GROUND_UNIT then
         return
@@ -1044,6 +1103,18 @@ function intel.setup(configuration)
     end
     tarmac.events.on("EJECTION", onCrewGone)
     tarmac.events.on("PILOT_DEAD", onCrewGone)
+    tarmac.events.on("LAND", function(event)
+        local unitName = object.name(event.initiator)
+        if unitName then
+            basedAt[unitName] = friendlyBase(event)
+        end
+    end)
+    tarmac.events.on("TAKEOFF", function(event)
+        local unitName = object.name(event.initiator)
+        if unitName then
+            basedAt[unitName] = nil
+        end
+    end)
     tarmac.scheduler.every(i.interval, intel.check, { delay = i.interval, name = "industry.intel" })
     tarmac.scheduler.every(i.summaryInterval, intel.summary, { delay = i.summaryInterval, name = "industry.intel.summary" })
 end

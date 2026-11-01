@@ -261,6 +261,48 @@ test("players report moved sites and empty positions with their recon report", f
     industry.config.intel.aiRecon = true
 end)
 
+test("a player who lands at a friendly base hands in his recon package", function()
+    industry.config.intel.aiRecon = false
+    enterSlot()
+    put(player, 60000, 36000, 1000)
+    dcs.advance(10)
+    expect.notNil(intel.package("BlueStrike-1-1").items["group:SAM-Red-1"])
+    expect.truthy(#dcs.findMessages("Send your recon report to HQ (F10 > HQ) or land at a friendly base.") > 0)
+
+    player.airborne = false
+    dcs.fire({ id = world.event.S_EVENT_LAND, initiator = player, place = Airbase.getByName("Krymsk") })
+    dcs.advance(30)
+    expect.notNil(intel.package("BlueStrike-1-1").items["group:SAM-Red-1"], "no debrief at an enemy base")
+
+    player.airborne = true
+    dcs.fire({ id = world.event.S_EVENT_TAKEOFF, initiator = player, place = Airbase.getByName("Krymsk") })
+    player.airborne = false
+    dcs.fire({ id = world.event.S_EVENT_LAND, initiator = player, place = Airbase.getByName("Senaki") })
+    dcs.advance(10)
+    expect.notNil(intel.package("BlueStrike-1-1").items["group:SAM-Red-1"], "not right after touchdown")
+    dcs.advance(20)
+    expect.equal(#dcs.findMessages("HQ: Debrief received, 1 new target on the map."), 1)
+    expect.notNil(intel.known(2)["group:SAM-Red-1"])
+    expect.equal(intel.package("BlueStrike-1-1").count, 0)
+    expect.truthy(logged("blue: Hornet (BlueStrike-1-1) debriefed at Senaki: 1 new, 0 moved, 0 no longer there, 0 already known"))
+    dcs.kill("BlueStrike-1-1")
+end)
+
+test("a crash right after touchdown loses the recon package", function()
+    enterSlot()
+    put(player, 95000, 91000, 1000)
+    dcs.advance(10)
+    expect.notNil(intel.package("BlueStrike-1-1").items["group:Shorad-Red-1"])
+    player.airborne = false
+    dcs.fire({ id = world.event.S_EVENT_LAND, initiator = player, place = Airbase.getByName("Senaki") })
+    dcs.fire({ id = world.event.S_EVENT_PILOT_DEAD, initiator = player })
+    dcs.advance(30)
+    expect.isNil(intel.package("BlueStrike-1-1"))
+    expect.isNil(intel.known(2)["group:Shorad-Red-1"])
+    dcs.kill("BlueStrike-1-1")
+    industry.config.intel.aiRecon = true
+end)
+
 test("at night only types with night vision see, and not as far", function()
     enterSlot()
     put(player, 0, 55500, 500)

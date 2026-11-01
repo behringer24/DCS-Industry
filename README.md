@@ -154,8 +154,10 @@ reached the coalition's HQ:
   *Reconnaissance* in the mission editor and the types in `intel.reconTypes` — see farther and from higher up.
 - **Players** get a message when they spot something (*Recon: Factory spotted, bearing 312 for 8 km*) and a mark
   that only their group sees. *F10 → HQ → Send recon report* sends everything spotted since the last report.
-  What is not sent is lost with the aircraft, on ejection or when the player leaves the slot. An aircraft whose
-  crew died or ejected sees nothing, even while the player still sits in it.
+  A player who lands at a base of his coalition or a neutral one (airfield, FARP or ship) is debriefed after
+  20 seconds on the ground and hands in his package without the radio; a crash right after touchdown does not
+  count. What is not sent is lost with the aircraft, on ejection or when the player leaves the slot. An
+  aircraft whose crew died or ejected sees nothing, even while the player still sits in it.
 - **Without HQ a coalition is blind.** When its last HQ objective is destroyed, all its reports and marks
   disappear, nobody spots anything any more and the HQ menu is gone. A coalition without any HQ objective in
   the mission does its reconnaissance without HQ.
